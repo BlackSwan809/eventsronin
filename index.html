@@ -2017,7 +2017,7 @@
             { name: '@Competitivo', id: '' },
             { name: '@KANNUSHI',    id: '' }
         ];
-        const DISCORD_BOT_URL = 'https://eventsronin-production.up.railway.app/'; // PEGÁ AQUÍ la URL pública de tu bot, p. ej. 'https://mi-bot.up.railway.app' (no es secreta). Si queda vacía, el modal la pide.
+        const DISCORD_BOT_URL = ''; // PEGÁ AQUÍ la URL pública de tu bot, p. ej. 'https://mi-bot.up.railway.app' (no es secreta). Si queda vacía, el modal la pide.
         const DC_KEY = 'hll_discord_cfg_v1';
         const isRoleId = s => /^\d{17,20}$/.test(s);
 
@@ -2090,7 +2090,9 @@
                 closeDiscordModal();
                 showToast(data.notFound && data.notFound.length ? '📣 Publicado, pero no encontré estos roles: ' + data.notFound.join(', ') : '📣 Evento publicado en Discord');
             } catch (err) {
-                dcMsg('No se pudo publicar: ' + err.message);
+                dcMsg(err instanceof TypeError
+                    ? `No se pudo conectar con ${url || '(URL vacía)'} desde ${location.origin}. Abrí esa URL en el navegador (debe decir "ok") y revisá ALLOWED_ORIGIN en el servidor.`
+                    : 'No se pudo publicar: ' + err.message);
                 if (/API key/i.test(err.message)) dcChangeKey();
             } finally {
                 btn.disabled = false;
