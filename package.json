@@ -1,0 +1,15 @@
+{
+  "name": "ronin-event-bot",
+  "version": "1.0.0",
+  "description": "Bot de Discord para publicar eventos y gestionar inscripciones (Sign Up)",
+  "main": "bot.js",
+  "scripts": { "start": "node bot.js" },
+  "engines": { "node": ">=18.17" },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "express-rate-limit": "^7.4.0"
+  }
+}
