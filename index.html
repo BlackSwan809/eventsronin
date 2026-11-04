@@ -96,7 +96,6 @@
             <button onclick="exportDiscordFormat()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold px-2.5 py-1 rounded shadow transition">
                 📋 Discord
             </button>
-            <button onclick="openDiscordModal()" class="edit-only bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold px-2.5 py-1 rounded shadow transition">📣 Publicar evento</button>
         </div>
     </header>
 
@@ -327,43 +326,6 @@
             </div>
             <div id="usersList" class="p-3 space-y-1.5 overflow-y-auto custom-scrollbar flex-1"></div>
             <div class="p-2 border-t border-slate-800 text-[9px] text-slate-500 leading-snug">El botón de invitar abre tu cliente de correo con el enlace y el código de activación. Los datos se guardan en este navegador (sin servidor).</div>
-        </div>
-    </div>
-
-    <div id="discordModal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden flex items-center justify-center p-3">
-        <div class="bg-slate-900 border border-slate-800 w-full max-w-md rounded-xl shadow-2xl flex flex-col max-h-[90vh]">
-            <div class="p-3 border-b border-slate-800 flex items-center justify-between">
-                <h3 class="font-bold text-xs text-indigo-400">📣 Publicar evento en Discord</h3>
-                <button onclick="closeDiscordModal()" class="text-slate-400 hover:text-white">✕</button>
-            </div>
-            <div class="p-3 space-y-2 overflow-y-auto custom-scrollbar">
-                <div><label class="text-[10px] text-slate-400 font-bold block mb-0.5">Título del torneo</label>
-                    <input id="dcTitle" type="text" maxlength="200" class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"></div>
-                <div class="grid grid-cols-2 gap-2">
-                    <div><label class="text-[10px] text-slate-400 font-bold block mb-0.5">Mapa</label>
-                        <select id="dcMap" class="w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-xs text-slate-200"></select></div>
-                    <div><label class="text-[10px] text-slate-400 font-bold block mb-0.5">Fecha y hora (UTC)</label>
-                        <input id="dcDate" type="datetime-local" onclick="try{this.showPicker()}catch(e){}" class="w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-xs text-slate-200 cursor-pointer"></div>
-                </div>
-                <div><label class="text-[10px] text-slate-400 font-bold block mb-0.5">Roles a mencionar</label>
-                    <div id="dcRoles" class="space-y-1"></div>
-                    <input id="dcExtraRoles" type="text" placeholder="Otros roles: nombre o ID, separados por coma" class="mt-1 w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[11px] text-slate-200 focus:outline-none focus:border-indigo-500"></div>
-                <div class="border-t border-slate-800 pt-2 space-y-1.5">
-                    <label class="text-[10px] text-slate-400 font-bold block">Conexión con el bot</label>
-                    <input id="dcUrl" type="url" placeholder="https://mi-bot.onrender.com" class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[11px] text-slate-200 focus:outline-none focus:border-indigo-500">
-                    <input id="dcKey" type="password" autocomplete="off" placeholder="API key del bot (solo la primera vez)" class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[11px] text-slate-200 focus:outline-none focus:border-indigo-500">
-                    <div id="dcKeySaved" class="hidden flex items-center justify-between text-[10px] text-emerald-400 bg-emerald-950/40 border border-emerald-800/50 rounded px-2 py-1">
-                        <span>🔑 Clave guardada en este navegador</span>
-                        <button type="button" onclick="dcChangeKey()" class="text-slate-400 hover:text-amber-300">Cambiar</button>
-                    </div>
-                    <label id="dcRememberRow" class="flex items-center gap-1.5 text-[10px] text-slate-400"><input id="dcRemember" type="checkbox" checked> Recordar en este navegador</label>
-                </div>
-                <div id="dcMsg" class="text-[11px] min-h-[14px]"></div>
-            </div>
-            <div class="p-2 border-t border-slate-800 flex justify-end gap-1">
-                <button onclick="closeDiscordModal()" class="bg-slate-800 text-slate-300 text-[10px] px-3 py-1 rounded">Cancelar</button>
-                <button id="dcSend" onclick="publicarEventoEnDiscord()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] px-3 py-1 rounded disabled:opacity-50">Publicar</button>
-            </div>
         </div>
     </div>
 
@@ -2008,96 +1970,6 @@
                 renderAll();
             } catch (err) {}
         });
-
-        // =====================================================================
-        //  DISCORD: publicar evento (lo recibe el bot Node.js; ver bot.js)
-        // =====================================================================
-        // El bot busca el rol por nombre (como Apollo). El ID es opcional: úsalo si dos roles se llaman igual.
-        const DISCORD_ROLES = [
-            { name: '@Competitivo', id: '' },
-            { name: '@KANNUSHI',    id: '' }
-        ];
-        const DISCORD_BOT_URL = ''; // PEGÁ AQUÍ la URL pública de tu bot, p. ej. 'https://mi-bot.up.railway.app' (no es secreta). Si queda vacía, el modal la pide.
-        const DC_KEY = 'hll_discord_cfg_v1';
-        const isRoleId = s => /^\d{17,20}$/.test(s);
-
-        function openDiscordModal() {
-            if (!guard()) return;
-            const m = getCurrentMatch();
-            $id('dcTitle').value = m.title || '';
-            const maps = [MAP_ALL].concat(MAP_POOL);
-            if (m.map && !maps.includes(m.map)) maps.unshift(m.map);
-            $id('dcMap').innerHTML = maps.map(x => `<option ${x === m.map ? 'selected' : ''}>${escapeHtml(x)}</option>`).join('');
-            $id('dcDate').value = toInputDate(m.date);
-            $id('dcRoles').innerHTML = DISCORD_ROLES.map((r, i) => `
-                <label class="flex items-center gap-1.5 text-xs text-slate-200">
-                    <input type="checkbox" class="dc-role" data-id="${escapeHtml(isRoleId(r.id) ? r.id : '')}" data-name="${escapeHtml(String(r.name).replace(/^@/, ''))}" checked>
-                    ${escapeHtml(r.name)}
-                </label>`).join('');
-            $id('dcExtraRoles').value = '';
-            let cfg = {}; try { cfg = JSON.parse(localStorage.getItem(DC_KEY) || '{}'); } catch (e) {}
-            const fixedUrl = !!DISCORD_BOT_URL;
-            $id('dcUrl').value = fixedUrl ? DISCORD_BOT_URL : (cfg.url || '');
-            $id('dcUrl').classList.toggle('hidden', fixedUrl);
-            $id('dcKey').value = cfg.key || '';
-            $id('dcKey').classList.toggle('hidden', !!cfg.key);
-            $id('dcRememberRow').classList.toggle('hidden', !!cfg.key);
-            $id('dcKeySaved').classList.toggle('hidden', !cfg.key);
-            dcMsg('');
-            $id('discordModal').classList.remove('hidden');
-        }
-        function dcChangeKey() {
-            $id('dcKey').value = '';
-            $id('dcKey').classList.remove('hidden');
-            $id('dcRememberRow').classList.remove('hidden');
-            $id('dcKeySaved').classList.add('hidden');
-            $id('dcKey').focus();
-        }
-        function closeDiscordModal() { $id('discordModal').classList.add('hidden'); }
-        function dcMsg(t, ok) { const e = $id('dcMsg'); e.textContent = t; e.className = 'text-[11px] min-h-[14px] ' + (ok ? 'text-emerald-400' : 'text-red-400'); }
-
-        async function publicarEventoEnDiscord() {
-            if (!guard()) return;
-            const title = $id('dcTitle').value.trim(), map = $id('dcMap').value;
-            const local = $id('dcDate').value; // "2026-11-08T21:00" (UTC)
-            const url = (DISCORD_BOT_URL || $id('dcUrl').value).trim().replace(/\/+$/, ''), key = $id('dcKey').value;
-            const roleIds = [], roleNames = [];
-            document.querySelectorAll('.dc-role:checked').forEach(c => { if (c.dataset.id) roleIds.push(c.dataset.id); else roleNames.push(c.dataset.name); });
-            $id('dcExtraRoles').value.split(',').map(t => t.trim()).filter(Boolean).forEach(t => {
-                const m = t.match(/^<@&(\d{17,20})>$|^(\d{17,20})$/);
-                if (m) roleIds.push(m[1] || m[2]); else roleNames.push(t.replace(/^@/, ''));
-            });
-
-            if (!title) return dcMsg('Escribí el título del torneo.');
-            if (!local) return dcMsg('Elegí la fecha y hora.');
-            if (!/^https:\/\//i.test(url)) return dcMsg('La URL del bot debe empezar con https://');
-            if (!key) return dcMsg('Falta la API key del bot.');
-
-            const payload = { title, map, startsAt: local + ':00Z', dateText: fmtMatchDate(local), roleIds: [...new Set(roleIds)], roleNames: [...new Set(roleNames)] };
-            const btn = $id('dcSend'); btn.disabled = true; dcMsg('Publicando…', true);
-            try {
-                const res = await fetch(url + '/publish', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'x-api-key': key },
-                    body: JSON.stringify(payload)
-                });
-                const data = await res.json().catch(() => ({}));
-                if (!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
-                try {
-                    if ($id('dcRemember').checked) localStorage.setItem(DC_KEY, JSON.stringify({ url, key }));
-                    else localStorage.removeItem(DC_KEY);
-                } catch (e) {}
-                closeDiscordModal();
-                showToast(data.notFound && data.notFound.length ? '📣 Publicado, pero no encontré estos roles: ' + data.notFound.join(', ') : '📣 Evento publicado en Discord');
-            } catch (err) {
-                dcMsg(err instanceof TypeError
-                    ? `No se pudo conectar con ${url || '(URL vacía)'} desde ${location.origin}. Abrí esa URL en el navegador (debe decir "ok") y revisá ALLOWED_ORIGIN en el servidor.`
-                    : 'No se pudo publicar: ' + err.message);
-                if (/API key/i.test(err.message)) dcChangeKey();
-            } finally {
-                btn.disabled = false;
-            }
-        }
 
         window.addEventListener('DOMContentLoaded', function() {
             initAuth();
