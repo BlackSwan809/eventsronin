@@ -47,12 +47,12 @@
     <!-- Top Command & Compact Control Bar -->
     <header class="bg-slate-900/90 border border-slate-800 rounded-lg p-2 flex flex-wrap items-center justify-between gap-2 shadow-md">
         <!-- Title & Match Meta Inputs -->
-        <div class="flex items-center space-x-2 flex-1 min-w-[320px]">
+        <div class="flex flex-wrap items-center gap-2">
             <span class="bg-amber-500 text-slate-950 px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">RONIN</span>
-            <input type="text" id="matchTitleInput" oninput="updateMatchMeta('title', this.value)" class="bg-slate-950 border border-slate-800 rounded px-2 py-0.5 text-xs font-bold text-slate-100 focus:outline-none focus:border-cyan-500 w-44" placeholder="Ronin vs CAV">
-            <input type="datetime-local" id="matchDateInput" onclick="try{this.showPicker()}catch(e){}" onchange="updateMatchMeta('date', fmtMatchDate(this.value))" title="Fecha y hora del partido (UTC)" class="bg-slate-950 border border-slate-800 rounded px-2 py-0.5 text-[11px] text-slate-300 focus:outline-none focus:border-cyan-500 w-44 cursor-pointer">
+            <input type="text" id="matchTitleInput" oninput="updateMatchMeta('title', this.value)" class="bg-slate-950 border border-slate-800 rounded px-2 py-0.5 text-xs font-bold text-slate-100 focus:outline-none focus:border-cyan-500 w-44 shrink-0" placeholder="Ronin vs CAV">
+            <input type="datetime-local" id="matchDateInput" onclick="try{this.showPicker()}catch(e){}" onchange="updateMatchMeta('date', fmtMatchDate(this.value))" title="Fecha y hora del partido (UTC)" class="bg-slate-950 border border-slate-800 rounded px-2 py-0.5 text-[11px] text-slate-300 focus:outline-none focus:border-cyan-500 w-44 shrink-0 cursor-pointer">
             <span class="text-[9px] text-slate-500 -ml-1">UTC</span>
-            <div id="mapPicker" class="relative">
+            <div id="mapPicker" class="relative shrink-0">
                 <button type="button" id="mapPickerBtn" onclick="toggleMapMenu()" class="bg-slate-950 border border-slate-800 hover:border-cyan-500 rounded px-2 py-0.5 text-[11px] text-slate-300 w-48 flex items-center justify-between gap-1 disabled:opacity-60 disabled:cursor-default">
                     <span id="mapPickerLabel" class="truncate">Seleccionar mapa</span><span class="text-slate-500">▾</span>
                 </button>
@@ -61,8 +61,9 @@
         </div>
 
         <!-- Live Metrics & Officer Counter -->
-        <div class="flex items-center space-x-3 bg-slate-950/80 px-3 py-1 rounded-md border border-slate-800 text-[11px]">
-            <div><span class="text-slate-400">Total:</span> <span id="statAssigned" class="font-bold text-slate-200">0/50</span></div>
+        <div class="flex items-center space-x-3 shrink-0 whitespace-nowrap bg-slate-950/80 px-3 py-1 rounded-md border border-slate-800 text-[11px]">
+            <div><span class="text-slate-400">Asignados:</span> <span id="statAssigned" class="font-bold text-slate-200">0/50</span></div>
+            <div class="border-l border-slate-800 pl-3"><span class="text-slate-400">Presentes:</span> <span id="statPresent" class="font-bold text-emerald-400">0/0</span></div>
             <div class="border-l border-slate-800 pl-3"><span class="text-slate-400">Oficiales (Máx 20):</span> <span id="statOfficers" class="font-bold text-cyan-400">0/20</span></div>
             <div class="border-l border-slate-800 pl-3"><span class="text-slate-400">Banca:</span> <span id="statBench" class="font-bold text-amber-400">0</span></div>
         </div>
@@ -668,11 +669,13 @@
             const match = getCurrentMatch();
             let totalAssigned = 0;
             let totalOfficers = 0;
+            let totalPresent = 0;
 
             match.squads.forEach(sq => {
                 sq.slots.forEach(slot => {
                     if (slot.player && slot.player.trim() !== '') {
                         totalAssigned++;
+                        if (slot.present) totalPresent++;
                         if (isOfficerSlot(slot)) totalOfficers++;
                     }
                 });
@@ -681,6 +684,8 @@
             const assignedEl = document.getElementById('statAssigned');
             const officersEl = document.getElementById('statOfficers');
             const benchEl = document.getElementById('statBench');
+            const presentEl = document.getElementById('statPresent');
+            if (presentEl) presentEl.innerText = `${totalPresent}/${totalAssigned}`;
 
             if (assignedEl) assignedEl.innerText = `${totalAssigned}/50`;
             if (officersEl) {
@@ -734,6 +739,7 @@
                     <span class="text-[10px] font-semibold text-slate-400 truncate w-24 shrink-0">${escapeHtml(slot.role)}</span>
                     ${isDriver ? `<span class="text-[8px] bg-amber-500/20 text-amber-300 px-0.5 rounded cursor-help" title="Maneja Camión de Suministros">🚚</span>` : ''}
                     ${(isNodeRunner || nodeAssignment) ? `<span class="text-[8px] bg-emerald-500/20 text-emerald-300 px-0.5 rounded font-bold cursor-help" title="${nodeAssignment ? 'Construye nodos en: ' + escapeHtml(nodeAssignment.hqTitle) + ' (' + escapeHtml(nodeAssignment.role) + ')' : 'Construye Nodos'}">🛠️ ${nodeAssignment ? 'Nodos' : ''}</span>` : ''}
+                    ${slot.player ? `<input type="checkbox" title="Presente" ${slot.present ? 'checked' : ''} onchange="togglePresent('${sq.id}', ${sIdx}, this.checked)" class="accent-emerald-500 w-3 h-3 shrink-0 cursor-pointer">` : ''}
                     <input type="text" data-ac="1" autocomplete="off" value="${escapeHtml(slot.player || '')}" placeholder="Vacío" onchange="updateSlotPlayer('${sq.id}', ${sIdx}, this.value)" class="w-full bg-slate-900 border border-slate-800 rounded px-1 py-0.2 text-[10px] font-semibold text-slate-100 focus:outline-none focus:border-cyan-500">
                     ${slot.player ? `<button onclick="clearSlot('${sq.id}', ${sIdx})" class="text-slate-500 hover:text-red-400 text-[10px]">×</button>` : ''}
                 </div>`;
@@ -1254,9 +1260,19 @@
             const squad = match.squads.find(s => s.id === sqId);
             if (squad && squad.slots[slotIdx]) {
                 squad.slots[slotIdx].player = val;
+                squad.slots[slotIdx].present = false;
                 saveState();
                 renderAll();
             }
+        }
+
+        function togglePresent(sqId, slotIdx, checked) {
+            if (!guard()) { renderAll(); return; }
+            const sq = getCurrentMatch().squads.find(s => s.id === sqId);
+            if (!sq || !sq.slots[slotIdx]) return;
+            sq.slots[slotIdx].present = !!checked;
+            saveState();
+            renderAll();
         }
 
         function clearSlot(sqId, slotIdx) {
@@ -1359,6 +1375,7 @@
                 const who = (slot.player || '').trim();
                 if (who) benchAddPlayer(match, who);
                 slot.player = '';
+                slot.present = false;
                 slot.off = true;
                 showToast(who ? `${slot.role} sin usar hoy · ${who} pasó a la banca` : `${slot.role} sin usar hoy`);
             } else {
@@ -1486,7 +1503,8 @@
                 const slot = {
                     role: roleIn ? roleIn.value.trim() : 'Rol',
                     officer: ofCk ? ofCk.checked : false,
-                    player: old ? old.player : ''
+                    player: old ? old.player : '',
+                    present: old ? !!old.present : false
                 };
                 if (old && old.off) slot.off = true;
                 newSlots.push(slot);
@@ -1665,7 +1683,7 @@
 
             match.squads.forEach(sq => {
                 txt += `> **${sq.name}** (${sq.functionType || ''})\n`;
-                const line = s => `> • ${s.role}: ${s.player ? s.player : '_Vacío_'}\n`;
+                const line = s => `> • ${s.role}: ${s.player ? s.player + (s.present ? ' ✅' : '') : '_Vacío_'}\n`;
                 const active = sq.slots.filter(s => !s.off);
                 if (sq.infPool) {
                     const offs = active.filter(s => isOfficerSlot(s));
@@ -1896,7 +1914,7 @@
         function applyRoleUI() {
             const ed = canEdit();
             document.body.classList.toggle('is-viewer', !ed);
-            document.querySelectorAll('#rosterCaptureArea input, #matchTitleInput').forEach(i => { i.readOnly = !ed; });
+            document.querySelectorAll('#rosterCaptureArea input, #matchTitleInput').forEach(i => { i.readOnly = !ed; if (i.type === 'checkbox') i.disabled = !ed; });
             const d = $id('matchDateInput'); if (d) d.disabled = !ed;
             renderMapPicker();
             const c = $id('sessionChip');
