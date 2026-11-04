@@ -349,10 +349,14 @@
                     <div id="dcRoles" class="space-y-1"></div>
                     <input id="dcExtraRoles" type="text" placeholder="Otros roles: nombre o ID, separados por coma" class="mt-1 w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[11px] text-slate-200 focus:outline-none focus:border-indigo-500"></div>
                 <div class="border-t border-slate-800 pt-2 space-y-1.5">
-                    <label class="text-[10px] text-slate-400 font-bold block">Servidor del bot (URL) y clave</label>
+                    <label class="text-[10px] text-slate-400 font-bold block">Conexión con el bot</label>
                     <input id="dcUrl" type="url" placeholder="https://mi-bot.onrender.com" class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[11px] text-slate-200 focus:outline-none focus:border-indigo-500">
-                    <input id="dcKey" type="password" autocomplete="off" placeholder="API key del bot" class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[11px] text-slate-200 focus:outline-none focus:border-indigo-500">
-                    <label class="flex items-center gap-1.5 text-[10px] text-slate-400"><input id="dcRemember" type="checkbox" checked> Recordar en este navegador</label>
+                    <input id="dcKey" type="password" autocomplete="off" placeholder="API key del bot (solo la primera vez)" class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[11px] text-slate-200 focus:outline-none focus:border-indigo-500">
+                    <div id="dcKeySaved" class="hidden flex items-center justify-between text-[10px] text-emerald-400 bg-emerald-950/40 border border-emerald-800/50 rounded px-2 py-1">
+                        <span>🔑 Clave guardada en este navegador</span>
+                        <button type="button" onclick="dcChangeKey()" class="text-slate-400 hover:text-amber-300">Cambiar</button>
+                    </div>
+                    <label id="dcRememberRow" class="flex items-center gap-1.5 text-[10px] text-slate-400"><input id="dcRemember" type="checkbox" checked> Recordar en este navegador</label>
                 </div>
                 <div id="dcMsg" class="text-[11px] min-h-[14px]"></div>
             </div>
@@ -2013,7 +2017,7 @@
             { name: '@Competitivo', id: '' },
             { name: '@KANNUSHI',    id: '' }
         ];
-        const DISCORD_BOT_URL = ''; // opcional: URL por defecto del bot, p. ej. 'https://mi-bot.onrender.com'
+        const DISCORD_BOT_URL = ''; // PEGÁ AQUÍ la URL pública de tu bot, p. ej. 'https://mi-bot.up.railway.app' (no es secreta). Si queda vacía, el modal la pide.
         const DC_KEY = 'hll_discord_cfg_v1';
         const isRoleId = s => /^\d{17,20}$/.test(s);
 
@@ -2032,10 +2036,22 @@
                 </label>`).join('');
             $id('dcExtraRoles').value = '';
             let cfg = {}; try { cfg = JSON.parse(localStorage.getItem(DC_KEY) || '{}'); } catch (e) {}
-            $id('dcUrl').value = cfg.url || DISCORD_BOT_URL;
+            const fixedUrl = !!DISCORD_BOT_URL;
+            $id('dcUrl').value = fixedUrl ? DISCORD_BOT_URL : (cfg.url || '');
+            $id('dcUrl').classList.toggle('hidden', fixedUrl);
             $id('dcKey').value = cfg.key || '';
+            $id('dcKey').classList.toggle('hidden', !!cfg.key);
+            $id('dcRememberRow').classList.toggle('hidden', !!cfg.key);
+            $id('dcKeySaved').classList.toggle('hidden', !cfg.key);
             dcMsg('');
             $id('discordModal').classList.remove('hidden');
+        }
+        function dcChangeKey() {
+            $id('dcKey').value = '';
+            $id('dcKey').classList.remove('hidden');
+            $id('dcRememberRow').classList.remove('hidden');
+            $id('dcKeySaved').classList.add('hidden');
+            $id('dcKey').focus();
         }
         function closeDiscordModal() { $id('discordModal').classList.add('hidden'); }
         function dcMsg(t, ok) { const e = $id('dcMsg'); e.textContent = t; e.className = 'text-[11px] min-h-[14px] ' + (ok ? 'text-emerald-400' : 'text-red-400'); }
@@ -2044,7 +2060,7 @@
             if (!guard()) return;
             const title = $id('dcTitle').value.trim(), map = $id('dcMap').value;
             const local = $id('dcDate').value; // "2026-11-08T21:00" (UTC)
-            const url = $id('dcUrl').value.trim().replace(/\/+$/, ''), key = $id('dcKey').value;
+            const url = (DISCORD_BOT_URL || $id('dcUrl').value).trim().replace(/\/+$/, ''), key = $id('dcKey').value;
             const roleIds = [], roleNames = [];
             document.querySelectorAll('.dc-role:checked').forEach(c => { if (c.dataset.id) roleIds.push(c.dataset.id); else roleNames.push(c.dataset.name); });
             $id('dcExtraRoles').value.split(',').map(t => t.trim()).filter(Boolean).forEach(t => {
@@ -2075,6 +2091,7 @@
                 showToast(data.notFound && data.notFound.length ? '📣 Publicado, pero no encontré estos roles: ' + data.notFound.join(', ') : '📣 Evento publicado en Discord');
             } catch (err) {
                 dcMsg('No se pudo publicar: ' + err.message);
+                if (/API key/i.test(err.message)) dcChangeKey();
             } finally {
                 btn.disabled = false;
             }
