@@ -130,17 +130,30 @@ app.post('/publish', limiter, async (req, res) => {
   if (!validKey(req.get('x-api-key'))) return res.status(401).json({ ok: false, error: 'API key inválida' });
   if (!client.isReady()) return res.status(503).json({ ok: false, error: 'El bot aún no está conectado' });
 
-  const { title, map, startsAt, dateText, roleIds } = req.body || {};
+  const { title, map, startsAt, dateText, roleIds, roleNames } = req.body || {};
   const t = clean(title, 200), m = clean(map, 100);
   if (!t) return res.status(400).json({ ok: false, error: 'Falta el título' });
   if (!m) return res.status(400).json({ ok: false, error: 'Falta el mapa' });
-  const ids = [...new Set((Array.isArray(roleIds) ? roleIds : []).map(String).filter(x => /^\d{17,20}$/.test(x)))].slice(0, 10);
+  let ids = [...new Set((Array.isArray(roleIds) ? roleIds : []).map(String).filter(x => /^\d{17,20}$/.test(x)))].slice(0, 10);
+
+  const names = [...new Set((Array.isArray(roleNames) ? roleNames : []).map(n => clean(n, 100).replace(/^@/, '')).filter(Boolean))].slice(0, 10);
 
   const unix = Math.floor(Date.parse(startsAt) / 1000);
   const when = Number.isFinite(unix) ? `<t:${unix}:F> · <t:${unix}:R>` : clean(dateText, 100) || 'Por confirmar';
 
   try {
     const channel = await client.channels.fetch(CHANNEL_ID);
+    // Resuelve nombres de rol (sin tildes ni mayúsculas) a IDs, como hace Apollo
+    const norm = s => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const notFound = [];
+    if (names.length) {
+      const guildRoles = await channel.guild.roles.fetch();
+      names.forEach(n => {
+        const r = guildRoles.find(x => x.id !== channel.guild.id && norm(x.name) === norm(n));
+        if (r) ids.push(r.id); else notFound.push(n);
+      });
+    }
+    ids = [...new Set(ids)].slice(0, 10);
     const lists = ROLES.map(() => []);
     const embed = new EmbedBuilder()
       .setTitle(t)
@@ -154,7 +167,7 @@ app.post('/publish', limiter, async (req, res) => {
       components: components(),
       allowedMentions: { roles: ids },
     });
-    res.json({ ok: true, messageId: msg.id, url: msg.url });
+    res.json({ ok: true, messageId: msg.id, url: msg.url, notFound });
   } catch (err) {
     console.error('Error publicando:', err);
     res.status(500).json({ ok: false, error: 'No se pudo publicar (revisa permisos del bot y CHANNEL_ID)' });

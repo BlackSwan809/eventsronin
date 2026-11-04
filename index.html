@@ -347,7 +347,7 @@
                 </div>
                 <div><label class="text-[10px] text-slate-400 font-bold block mb-0.5">Roles a mencionar</label>
                     <div id="dcRoles" class="space-y-1"></div>
-                    <input id="dcExtraRoles" type="text" placeholder="Otros roles por ID: 123…, <@&456…>" class="mt-1 w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[11px] text-slate-200 focus:outline-none focus:border-indigo-500"></div>
+                    <input id="dcExtraRoles" type="text" placeholder="Otros roles: nombre o ID, separados por coma" class="mt-1 w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[11px] text-slate-200 focus:outline-none focus:border-indigo-500"></div>
                 <div class="border-t border-slate-800 pt-2 space-y-1.5">
                     <label class="text-[10px] text-slate-400 font-bold block">Servidor del bot (URL) y clave</label>
                     <input id="dcUrl" type="url" placeholder="https://mi-bot.onrender.com" class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[11px] text-slate-200 focus:outline-none focus:border-indigo-500">
@@ -2008,10 +2008,10 @@
         // =====================================================================
         //  DISCORD: publicar evento (lo recibe el bot Node.js; ver bot.js)
         // =====================================================================
-        // Rellená los IDs reales (Discord > Ajustes > Avanzado > Modo desarrollador > clic derecho en el rol > Copiar ID)
+        // El bot busca el rol por nombre (como Apollo). El ID es opcional: úsalo si dos roles se llaman igual.
         const DISCORD_ROLES = [
-            { name: '@Competitivo', id: 'PEGAR_ID_COMPETITIVO' },
-            { name: '@KANNUSHI',    id: 'PEGAR_ID_KANNUSHI' }
+            { name: '@Competitivo', id: '' },
+            { name: '@KANNUSHI',    id: '' }
         ];
         const DISCORD_BOT_URL = ''; // opcional: URL por defecto del bot, p. ej. 'https://mi-bot.onrender.com'
         const DC_KEY = 'hll_discord_cfg_v1';
@@ -2026,9 +2026,9 @@
             $id('dcMap').innerHTML = maps.map(x => `<option ${x === m.map ? 'selected' : ''}>${escapeHtml(x)}</option>`).join('');
             $id('dcDate').value = toInputDate(m.date);
             $id('dcRoles').innerHTML = DISCORD_ROLES.map((r, i) => `
-                <label class="flex items-center gap-1.5 text-xs ${isRoleId(r.id) ? 'text-slate-200' : 'text-slate-600'}">
-                    <input type="checkbox" class="dc-role" value="${escapeHtml(r.id)}" ${isRoleId(r.id) ? 'checked' : 'disabled'}>
-                    ${escapeHtml(r.name)}${isRoleId(r.id) ? '' : ' <span class="text-[9px]">(falta el ID en DISCORD_ROLES)</span>'}
+                <label class="flex items-center gap-1.5 text-xs text-slate-200">
+                    <input type="checkbox" class="dc-role" data-id="${escapeHtml(isRoleId(r.id) ? r.id : '')}" data-name="${escapeHtml(String(r.name).replace(/^@/, ''))}" checked>
+                    ${escapeHtml(r.name)}
                 </label>`).join('');
             $id('dcExtraRoles').value = '';
             let cfg = {}; try { cfg = JSON.parse(localStorage.getItem(DC_KEY) || '{}'); } catch (e) {}
@@ -2045,15 +2045,19 @@
             const title = $id('dcTitle').value.trim(), map = $id('dcMap').value;
             const local = $id('dcDate').value; // "2026-11-08T21:00" (UTC)
             const url = $id('dcUrl').value.trim().replace(/\/+$/, ''), key = $id('dcKey').value;
-            const roleIds = [...document.querySelectorAll('.dc-role:checked')].map(c => c.value);
-            ($id('dcExtraRoles').value.match(/\d{17,20}/g) || []).forEach(id => roleIds.push(id));
+            const roleIds = [], roleNames = [];
+            document.querySelectorAll('.dc-role:checked').forEach(c => { if (c.dataset.id) roleIds.push(c.dataset.id); else roleNames.push(c.dataset.name); });
+            $id('dcExtraRoles').value.split(',').map(t => t.trim()).filter(Boolean).forEach(t => {
+                const m = t.match(/^<@&(\d{17,20})>$|^(\d{17,20})$/);
+                if (m) roleIds.push(m[1] || m[2]); else roleNames.push(t.replace(/^@/, ''));
+            });
 
             if (!title) return dcMsg('Escribí el título del torneo.');
             if (!local) return dcMsg('Elegí la fecha y hora.');
             if (!/^https:\/\//i.test(url)) return dcMsg('La URL del bot debe empezar con https://');
             if (!key) return dcMsg('Falta la API key del bot.');
 
-            const payload = { title, map, startsAt: local + ':00Z', dateText: fmtMatchDate(local), roleIds: [...new Set(roleIds)] };
+            const payload = { title, map, startsAt: local + ':00Z', dateText: fmtMatchDate(local), roleIds: [...new Set(roleIds)], roleNames: [...new Set(roleNames)] };
             const btn = $id('dcSend'); btn.disabled = true; dcMsg('Publicando…', true);
             try {
                 const res = await fetch(url + '/publish', {
@@ -2068,7 +2072,7 @@
                     else localStorage.removeItem(DC_KEY);
                 } catch (e) {}
                 closeDiscordModal();
-                showToast('📣 Evento publicado en Discord');
+                showToast(data.notFound && data.notFound.length ? '📣 Publicado, pero no encontré estos roles: ' + data.notFound.join(', ') : '📣 Evento publicado en Discord');
             } catch (err) {
                 dcMsg('No se pudo publicar: ' + err.message);
             } finally {
