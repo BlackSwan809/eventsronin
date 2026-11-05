@@ -40,7 +40,16 @@
         .patch-box { font-weight: 700; font-size: 10px; }
             body.is-viewer .edit-only, body.is-viewer #rosterCaptureArea button, body.is-viewer #archiveListContainer button { display: none !important; }
         input[type="datetime-local"] { color-scheme: dark; }
+        /* Arrastrar y soltar */
+        .dnd-grip { cursor: pointer; color: var(--dim, #64748b); font-size: 11px; line-height: 1; width: 10px; text-align: center; flex-shrink: 0; user-select: none; opacity: .55; }
+        .dnd-grip[draggable="true"] { cursor: grab; opacity: 1; }
+        .dnd-handle[draggable="true"] { cursor: grab; }
+        .dnd-dragging { opacity: .35; }
+        .dnd-over { outline: 2px dashed var(--accent, #f59e0b) !important; outline-offset: -1px; filter: brightness(1.3); }
+        .dnd-sel { outline: 2px solid var(--accent, #f59e0b) !important; outline-offset: -1px; }
+        .theme-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(128,128,128,.4); }
     </style>
+    <style id="uiThemeStyle"></style>
 </head>
 <body id="appBody" class="bg-slate-950 text-slate-100 min-h-screen flex flex-col p-2 space-y-2">
 
@@ -48,7 +57,7 @@
     <header class="bg-slate-900/90 border border-slate-800 rounded-lg p-2 flex flex-wrap items-center justify-between gap-2 shadow-md">
         <!-- Title & Match Meta Inputs -->
         <div class="flex flex-wrap items-center gap-2">
-            <span class="bg-amber-500 text-slate-950 px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">RONIN</span>
+            <img data-logo alt="Ronin" title="¡Tiranos, temblad!" class="h-8 w-auto rounded shrink-0"><span class="bg-amber-500 text-slate-950 px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">RONIN</span>
             <input type="text" id="matchTitleInput" oninput="updateMatchMeta('title', this.value)" class="bg-slate-950 border border-slate-800 rounded px-2 py-0.5 text-xs font-bold text-slate-100 focus:outline-none focus:border-cyan-500 w-44 shrink-0" placeholder="Ronin vs CAV">
             <input type="datetime-local" id="matchDateInput" onclick="try{this.showPicker()}catch(e){}" onchange="updateMatchMeta('date', fmtMatchDate(this.value))" title="Fecha y hora del partido (UTC)" class="bg-slate-950 border border-slate-800 rounded px-2 py-0.5 text-[11px] text-slate-300 focus:outline-none focus:border-cyan-500 w-44 shrink-0 cursor-pointer">
             <span class="text-[9px] text-slate-500 -ml-1">UTC</span>
@@ -73,13 +82,7 @@
             <span id="sessionChip" class="hidden text-[10px] font-bold text-emerald-300 bg-slate-950 border border-slate-800 rounded px-2 py-1"></span>
             <button onclick="openUsersModal()" class="edit-only bg-cyan-700 hover:bg-cyan-600 text-white text-[10px] font-bold px-2.5 py-1 rounded shadow transition">👥 Accesos</button>
             <button onclick="logout()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] px-2 py-1 rounded border border-slate-700">Salir</button>
-            <select id="themeSelector" onchange="changeTheme(this.value)" class="bg-slate-800 border border-slate-700 text-slate-300 text-[10px] rounded px-2 py-1 focus:outline-none">
-                <option value="tacticalDark">Tactical Dark</option>
-                <option value="slateCommand">Slate Command</option>
-                <option value="deepForest">Deep Forest</option>
-                <option value="midnightPurple">Midnight Purple</option>
-                <option value="amoledBlack">AMOLED Black</option>
-            </select>
+            <button type="button" id="themeBtn" onclick="openThemeModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-semibold px-2 py-1 rounded border border-slate-700 transition">🎨 Personalizar</button>
 
             <!-- Excel Import Button -->
             <label class="edit-only bg-emerald-700 hover:bg-emerald-600 text-white text-[10px] font-bold px-2.5 py-1 rounded shadow cursor-pointer transition flex items-center gap-1">
@@ -112,6 +115,21 @@
 
     <!-- MAIN COMPACT LAYOUT BOARD -->
     <div id="rosterCaptureArea" class="bg-slate-950 p-2 rounded-lg border border-slate-900 grid grid-cols-12 gap-2 flex-1">
+        <!-- Marca del clan + datos del partido (también sale en la captura) -->
+        <div class="col-span-12 flex items-center justify-between gap-2 border-b border-slate-800 pb-1.5">
+            <div class="flex items-center gap-2">
+                <img data-logo alt="" class="h-9 w-auto rounded">
+                <div class="leading-tight">
+                    <div class="text-xs font-black uppercase tracking-wider text-amber-400">RONIN</div>
+                    <div class="text-[9px] uppercase tracking-widest text-slate-400">¡Tiranos, temblad!</div>
+                </div>
+            </div>
+            <div class="text-right leading-tight">
+                <div id="capTitle" class="text-xs font-bold text-slate-100"></div>
+                <div id="capMeta" class="text-[10px] text-slate-400"></div>
+            </div>
+        </div>
+
         
         <!-- COLUMN 1 (3 cols): Command HQ, Zapaleri Defense & Recon / Bengalas -->
         <div class="col-span-12 md:col-span-3 space-y-2 flex flex-col justify-between">
@@ -159,7 +177,7 @@
 
         <!-- COLUMN 4 (3 cols): Compact Bench & Quick Controls -->
         <div class="col-span-12 md:col-span-3 space-y-2 flex flex-col justify-between">
-            <div class="bg-slate-900/80 border border-slate-800 rounded-lg p-2 space-y-2">
+            <div data-dnd="bench" class="bg-slate-900/80 border border-slate-800 rounded-lg p-2 space-y-2">
                 <div class="flex items-center justify-between">
                     <span class="font-bold text-[11px] text-amber-400 flex items-center gap-1">👥 Banca / Convocados</span>
                     <span id="benchTotalCount" class="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded font-bold">0</span>
@@ -175,8 +193,9 @@
                     <button onclick="clearExcelDatabase()" title="Volver a la base integrada del Listado Maestro" class="text-slate-400 hover:text-amber-300">Restablecer</button>
                 </div>
 
+                <div class="edit-only no-capture text-[9px] text-slate-500 leading-snug">↕ Arrastrá jugadores entre la banca y los asientos (o tocá ⠿ y después el destino). Soltar sobre la banca libera el asiento; sobre un asiento de nodos, copia al jugador (sigue en su escuadra).</div>
                 <!-- Bench Items -->
-                <div id="benchListContainer" class="space-y-1 max-h-36 overflow-y-auto custom-scrollbar pr-1"></div>
+                <div id="benchListContainer" class="space-y-1 max-h-36 min-h-[28px] overflow-y-auto custom-scrollbar pr-1"></div>
             </div>
 
             <!-- NODE PLAN / LOGISTICS BOXES BELOW BENCH -->
@@ -255,12 +274,17 @@
                 <div>
                     <label class="text-[10px] text-slate-400 font-bold block mb-0.5">Color Neón</label>
                     <div class="grid grid-cols-3 gap-1">
-                        <button type="button" onclick="setSquadColorChoice('neonRed')" class="p-1 rounded border border-red-500/50 bg-red-500/20 text-red-400 text-[10px]">Rojo (Bushido)</button>
-                        <button type="button" onclick="setSquadColorChoice('neonOrange')" class="p-1 rounded border border-orange-500/50 bg-orange-500/20 text-orange-400 text-[10px]">Naranja (Sura)</button>
-                        <button type="button" onclick="setSquadColorChoice('neonCyan')" class="p-1 rounded border border-cyan-500/50 bg-cyan-500/20 text-cyan-400 text-[10px]">Azul (Hellwings)</button>
-                        <button type="button" onclick="setSquadColorChoice('neonGreen')" class="p-1 rounded border border-emerald-500/50 bg-emerald-500/20 text-emerald-400 text-[10px]">Verde (Zapaleri)</button>
-                        <button type="button" onclick="setSquadColorChoice('neonGold')" class="p-1 rounded border border-amber-500/50 bg-amber-500/20 text-amber-400 text-[10px]">Dorado (Arietes/CMD)</button>
-                        <button type="button" onclick="setSquadColorChoice('neonPurple')" class="p-1 rounded border border-purple-500/50 bg-purple-500/20 text-purple-400 text-[10px]">Violeta (KRGN)</button>
+                        <button type="button" onclick="setSquadColorChoice('neonRed')" class="keep-color p-1 rounded border border-red-500/50 bg-red-500/20 text-red-400 text-[10px]">Rojo (Bushido)</button>
+                        <button type="button" onclick="setSquadColorChoice('neonOrange')" class="keep-color p-1 rounded border border-orange-500/50 bg-orange-500/20 text-orange-400 text-[10px]">Naranja (Sura)</button>
+                        <button type="button" onclick="setSquadColorChoice('neonCyan')" class="keep-color p-1 rounded border border-cyan-500/50 bg-cyan-500/20 text-cyan-400 text-[10px]">Azul (Hellwings)</button>
+                        <button type="button" onclick="setSquadColorChoice('neonGreen')" class="keep-color p-1 rounded border border-emerald-500/50 bg-emerald-500/20 text-emerald-400 text-[10px]">Verde (Zapaleri)</button>
+                        <button type="button" onclick="setSquadColorChoice('neonGold')" class="keep-color p-1 rounded border border-amber-500/50 bg-amber-500/20 text-amber-400 text-[10px]">Dorado (Arietes/CMD)</button>
+                        <button type="button" onclick="setSquadColorChoice('neonPurple')" class="keep-color p-1 rounded border border-purple-500/50 bg-purple-500/20 text-purple-400 text-[10px]">Violeta (KRGN)</button>
+                    </div>
+                    <div class="flex items-center gap-2 mt-1.5">
+                        <label class="text-[10px] text-slate-400 font-bold">Color propio</label>
+                        <input type="color" id="configSquadCustomColor" value="#22c55e" oninput="setSquadColorChoice('custom')" class="w-8 h-6 p-0 border-0 bg-transparent cursor-pointer">
+                        <span id="configSquadColorLabel" class="text-[10px] text-slate-500"></span>
                     </div>
                     <input type="hidden" id="configSquadColorInput">
                 </div>
@@ -298,10 +322,67 @@
         </div>
     </div>
 
+    <!-- Personalización: paletas, colores, fuente -->
+    <div id="themeModal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden flex items-center justify-center p-3">
+        <div class="bg-slate-900 border border-slate-800 w-full max-w-2xl rounded-xl shadow-2xl flex flex-col max-h-[90vh]">
+            <div class="p-3 border-b border-slate-800 flex items-center justify-between">
+                <h3 class="font-bold text-xs text-amber-400">🎨 Personalización</h3>
+                <button onclick="closeThemeModal()" class="text-slate-400 hover:text-white">✕</button>
+            </div>
+            <div class="p-3 space-y-3 overflow-y-auto custom-scrollbar flex-1">
+                <div class="text-[10px] text-slate-500 leading-snug">Se guarda en este navegador y es personal: cada persona (admin o invitado) puede elegir su propia vista. La captura de imagen usa los colores que tengas activos.</div>
+                <div>
+                    <div class="text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1">Paletas</div>
+                    <div id="presetGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-1.5"></div>
+                </div>
+                <div>
+                    <div class="text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1">Colores</div>
+                    <div id="uiColors" class="grid grid-cols-1 sm:grid-cols-2 gap-1.5"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="text-[10px] text-slate-400 font-bold block mb-0.5">Fuente</label>
+                        <select id="uiFontSel" onchange="setUiFont(this.value)" class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200"></select>
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-slate-400 font-bold block mb-0.5">Esquinas</label>
+                        <select id="uiRadiusSel" onchange="setUiRadius(this.value)" class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200">
+                            <option value="sharp">Cuadradas</option>
+                            <option value="normal">Normales</option>
+                            <option value="round">Redondeadas</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <div class="text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1">Mis paletas</div>
+                    <div class="flex gap-1 mb-1">
+                        <input id="palName" type="text" placeholder="Nombre de la paleta..." onkeydown="if(event.key==='Enter') savePalette()" class="flex-1 bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-slate-100 focus:outline-none focus:border-cyan-500">
+                        <button type="button" onclick="savePalette()" class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[10px] px-2.5 py-1 rounded">Guardar actual</button>
+                    </div>
+                    <div id="myPalettes" class="space-y-1"></div>
+                </div>
+                <div>
+                    <div class="text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1">Compartir paleta (código)</div>
+                    <textarea id="paletteCode" rows="2" placeholder="Pegá acá un código de paleta y tocá Aplicar" class="w-full bg-slate-950 border border-slate-800 rounded p-1.5 font-mono text-[10px] text-slate-300 focus:outline-none resize-none"></textarea>
+                    <div class="flex gap-1 mt-1">
+                        <button type="button" onclick="exportPalette()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] px-2.5 py-1 rounded border border-slate-700">Generar código actual</button>
+                        <button type="button" onclick="importPalette()" class="bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold text-[10px] px-2.5 py-1 rounded">Aplicar código</button>
+                    </div>
+                </div>
+                <div class="text-[10px] text-slate-500 leading-snug">El color de cada escuadra se cambia desde su ⚙ (neón o color propio).</div>
+            </div>
+            <div class="p-2 border-t border-slate-800 flex justify-between">
+                <button type="button" onclick="resetUiTheme()" class="bg-red-600/20 text-red-400 text-[10px] px-2 py-1 rounded">Restablecer</button>
+                <button type="button" onclick="closeThemeModal()" class="bg-slate-800 text-slate-200 text-[10px] px-3 py-1 rounded">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Login -->
     <div id="authGate" class="fixed inset-0 bg-slate-950 flex items-center justify-center p-3" style="z-index:100">
         <div class="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-xl shadow-2xl p-4 space-y-2.5">
-            <div class="flex items-center gap-2"><span class="bg-amber-500 text-slate-950 px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">RONIN</span><h2 id="authTitle" class="font-bold text-sm text-amber-400">Acceso</h2></div>
+            <div class="flex items-center gap-2"><img data-logo alt="Ronin" title="¡Tiranos, temblad!" class="h-8 w-auto rounded shrink-0"><span class="bg-amber-500 text-slate-950 px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">RONIN</span><h2 id="authTitle" class="font-bold text-sm text-amber-400">Acceso</h2></div>
+            <div class="text-[10px] uppercase tracking-widest text-slate-500">¡Tiranos, temblad!</div>
             <p id="authHint" class="text-[11px] text-slate-400 leading-relaxed"></p>
             <input id="authEmail" type="email" autocomplete="username" placeholder="correo@ejemplo.com" class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-cyan-500">
             <input id="authPass" type="password" autocomplete="current-password" placeholder="Contraseña" class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-cyan-500">
@@ -539,35 +620,31 @@
         // v3: limpia los nicks de ejemplo que traía la alineación por defecto (solo esos, no los que cargó el usuario)
         function migrateMatch(m) {
             migrateV2(m);
-            if ((m.schemaV || 1) < 3) {
-                (m.squads || []).forEach(sq => (sq.slots || []).forEach(sl => { if (SEED_NICKS.includes(sl.player)) sl.player = ''; }));
-                m.bench = (m.bench || []).filter(b => !SEED_BENCH.includes(b));
-                m.schemaV = 3;
-            }
-            // v4: Zapaleri sin D1; Vig, F1 y F2 son oficiales y se agrega infantería defensiva.
-            const zplr = (m.squads || []).find(sq => sq.id === 'sq_zplr');
-            if (zplr && (m.schemaV || 1) < 4) {
-                const oldSlots = zplr.slots || [];
-                const findRole = role => oldSlots.find(sl => String(sl.role || '').trim().toLowerCase() === role.toLowerCase());
-                const vig = findRole('Vig') || { role: 'Vig', player: '' };
-                const f1 = findRole('F1 (Conductor Truck)') || { role: 'F1 (Conductor Truck)', player: '' };
-                const f2 = findRole('F2 (Construye Nodos)') || { role: 'F2 (Construye Nodos)', player: '' };
-                const oldD1 = findRole('D1');
-                if (oldD1 && oldD1.player) {
-                    m.bench = m.bench || [];
-                    benchAddPlayer(m, oldD1.player);
-                }
-                [vig, f1, f2].forEach(sl => { sl.officer = true; delete sl.off; });
-                const infantry = oldSlots.filter(sl => ![vig, f1, f2].includes(sl) && !/^d1$/i.test(String(sl.role || '').trim()) && !isOfficerSlot(sl));
-                infantry.forEach((sl, i) => { if (/^d1$/i.test(String(sl.role || '').trim())) return; sl.officer = false; });
-                const hasInf1 = infantry.some(sl => /^inf(?:anter[ií]a)?\s*1$/i.test(String(sl.role || '').trim()));
-                const hasInf2 = infantry.some(sl => /^inf(?:anter[ií]a)?\s*2$/i.test(String(sl.role || '').trim()));
-                if (!hasInf1) infantry.push({ role: 'Inf 1', officer: false, player: '' });
-                if (!hasInf2) infantry.push({ role: 'Inf 2', officer: false, player: '' });
-                zplr.infPool = true;
-                zplr.slots = [vig, f1, f2, ...infantry.filter(sl => !/^d1$/i.test(String(sl.role || '').trim()))];
-            }
-            m.schemaV = Math.max(m.schemaV || 1, 4);
+            migrateV3(m);
+            migrateV4(m);
+        }
+        function migrateV3(m) {
+            if ((m.schemaV || 1) >= 3) return;
+            (m.squads || []).forEach(sq => (sq.slots || []).forEach(sl => { if (SEED_NICKS.includes(sl.player)) sl.player = ''; }));
+            m.bench = (m.bench || []).filter(b => !SEED_BENCH.includes(b));
+            m.schemaV = 3;
+        }
+        // v4: Zapaleri pasa a ★ Oficiales (Vig, F1, F2) + 🪖 Infantería (Inf 1, Inf 2), igual que las Líneas
+        function migrateV4(m) {
+            if ((m.schemaV || 1) >= 4) return;
+            (m.squads || []).forEach(sq => {
+                if (sq.id !== 'sq_zplr' || sq.infPool) return;
+                let infN = 0;
+                sq.slots.forEach(sl => {
+                    const r = String(sl.role || '').trim();
+                    if (/^(vig|f1|f2)\b/i.test(r)) sl.officer = true;
+                    else if (/^d\d+$/i.test(r)) { infN++; sl.role = 'Inf ' + infN; sl.officer = false; }
+                });
+                while (infN < 2) { infN++; sq.slots.push({ role: 'Inf ' + infN, officer: false, player: '' }); }
+                sq.infPool = true;
+                sq.slots = officersFirst(sq.slots);
+            });
+            m.schemaV = 4;
         }
         function migrateV2(m) {
             if ((m.schemaV || 1) >= 2) return;
@@ -727,9 +804,14 @@
             const officerStyle = sq.infPool && isOfficerSlot(slot);
             const rowCls = officerStyle ? 'border-l-2 border-l-amber-500/70' : '';
 
+            const ed = canEdit();
+            const filled = !!(slot.player && String(slot.player).trim());
+            const dragAttr = (ed && filled) ? ' draggable="true"' : '';
+            const grip = ed ? `<span class="no-capture dnd-grip dnd-handle"${dragAttr} title="${filled ? 'Arrastrar o tocar para mover' : 'Soltar o tocar aquí para colocar'}">⠿</span>` : '';
             return `
-                <div class="bg-slate-950/80 border border-slate-800/80 ${rowCls} rounded px-1.5 py-0.5 flex items-center justify-between gap-1">
-                    <span class="text-[10px] font-semibold text-slate-400 truncate w-24 shrink-0">${escapeHtml(slot.role)}</span>
+                <div data-dnd="slot" data-sq="${sq.id}" data-i="${sIdx}" class="bg-slate-950/80 border border-slate-800/80 ${rowCls} rounded px-1.5 py-0.5 flex items-center justify-between gap-1">
+                    ${grip}
+                    <span class="dnd-handle text-[10px] font-semibold text-slate-400 truncate w-24 shrink-0"${dragAttr}>${escapeHtml(slot.role)}</span>
                     ${isDriver ? `<span class="text-[8px] bg-amber-500/20 text-amber-300 px-0.5 rounded cursor-help" title="Maneja Camión de Suministros">🚚</span>` : ''}
                     ${(isNodeRunner || nodeAssignment) ? `<span class="text-[8px] bg-emerald-500/20 text-emerald-300 px-0.5 rounded font-bold cursor-help" title="${nodeAssignment ? 'Construye nodos en: ' + escapeHtml(nodeAssignment.hqTitle) + ' (' + escapeHtml(nodeAssignment.role) + ')' : 'Construye Nodos'}">🛠️ ${nodeAssignment ? 'Nodos' : ''}</span>` : ''}
                     ${slot.player ? `<input type="checkbox" title="Presente" ${slot.present ? 'checked' : ''} onchange="togglePresent('${sq.id}', ${sIdx}, this.checked)" class="accent-emerald-500 w-3 h-3 shrink-0 cursor-pointer">` : ''}
@@ -793,8 +875,15 @@
                 body = `<div class="space-y-1 my-1">${sq.slots.map((sl, i) => renderSlotRow(sq, sl, i)).join('')}</div>`;
             }
 
+            let cardStyle = '';
+            let cardCls = themeClass;
+            if (sq.color === 'custom' && /^#[0-9a-f]{6}$/i.test(sq.customColor || '')) {
+                const hc = sq.customColor;
+                cardCls = '';
+                cardStyle = ` style="border-color:${hc} !important;background-color:${uiRgba(hc, 0.12)} !important;color:${hc}"`;
+            }
             return `
-                <div class="bg-slate-900/90 border-l-4 ${themeClass} border-slate-800 rounded p-1.5 shadow flex flex-col justify-between">
+                <div class="bg-slate-900/90 sq-card border-l-4 ${cardCls} border-slate-800 rounded p-1.5 shadow flex flex-col justify-between"${cardStyle}>
                     <div>
                         <div class="flex items-center justify-between gap-1 mb-1">
                             <div class="flex items-center gap-1.5 min-w-0">
@@ -851,9 +940,11 @@
                 return;
             }
 
+            const ed = canEdit();
             container.innerHTML = match.bench.map((p, idx) => `
-                <div class="bg-slate-950 border border-slate-800 rounded px-2 py-0.5 flex items-center justify-between text-[10px]">
-                    <span class="font-semibold text-slate-200 truncate">${escapeHtml(p)}</span>
+                <div data-dnd="benchitem" data-i="${idx}" ${ed ? 'draggable="true"' : ''} class="dnd-handle bg-slate-950 border border-slate-800 rounded px-2 py-0.5 flex items-center justify-between gap-1 text-[10px]">
+                    ${ed ? '<span class="no-capture dnd-grip dnd-handle" title="Arrastrar o tocar para mover">⠿</span>' : ''}
+                    <span class="font-semibold text-slate-200 truncate flex-1">${escapeHtml(p)}</span>
                     <button onclick="removeFromBench(${idx})" class="text-slate-500 hover:text-red-400 font-bold ml-1">×</button>
                 </div>
             `).join('');
@@ -867,12 +958,17 @@
             container.innerHTML = match.nodePlan.map((hq, hqIdx) => `
                 <div class="bg-slate-950 border border-slate-800/80 rounded p-1.5 space-y-1">
                     <div class="font-bold text-[10px] text-slate-300 border-b border-slate-800 pb-0.5 mb-1">${escapeHtml(hq.title)}</div>
-                    ${hq.slots.map((slot, sIdx) => `
-                        <div class="flex items-center justify-between gap-1">
-                            <span class="text-[9px] font-semibold text-slate-400 w-20 shrink-0 truncate">${escapeHtml(slot.role)}</span>
+                    ${hq.slots.map((slot, sIdx) => {
+                        const ed = canEdit();
+                        const filled = !!(slot.player && String(slot.player).trim());
+                        const dragAttr = (ed && filled) ? ' draggable="true"' : '';
+                        return `
+                        <div data-dnd="node" data-h="${hqIdx}" data-i="${sIdx}" class="flex items-center justify-between gap-1">
+                            ${ed ? `<span class="no-capture dnd-grip dnd-handle"${dragAttr} title="${filled ? 'Arrastrar o tocar para copiar/mover' : 'Soltar o tocar aquí para colocar'}">⠿</span>` : ''}
+                            <span class="dnd-handle text-[9px] font-semibold text-slate-400 w-20 shrink-0 truncate"${dragAttr}>${escapeHtml(slot.role)}</span>
                             <input type="text" data-ac="1" autocomplete="off" value="${escapeHtml(slot.player || '')}" placeholder="Jugador..." onchange="updateNodePlayer(${hqIdx}, ${sIdx}, this.value)" class="w-full bg-slate-900 border border-slate-800 rounded px-1 py-0.2 text-[9px] text-slate-100 focus:outline-none focus:border-cyan-500">
-                        </div>
-                    `).join('')}
+                        </div>`;
+                    }).join('')}
                 </div>
             `).join('');
         }
@@ -1428,6 +1524,8 @@
             document.getElementById('configSquadNameInput').value = sq.name || '';
             document.getElementById('configSquadFunctionSelect').value = sq.functionType || '';
             document.getElementById('configSquadColorInput').value = sq.color || 'neonGreen';
+            document.getElementById('configSquadCustomColor').value = /^#[0-9a-f]{6}$/i.test(sq.customColor || '') ? sq.customColor : '#22c55e';
+            updateSquadColorLabel();
 
             document.getElementById('configInfPool').checked = !!sq.infPool;
             renderConfigSlots(sq.slots);
@@ -1440,6 +1538,13 @@
 
         function setSquadColorChoice(color) {
             document.getElementById('configSquadColorInput').value = color;
+            updateSquadColorLabel();
+        }
+        function updateSquadColorLabel() {
+            const l = document.getElementById('configSquadColorLabel');
+            if (!l) return;
+            const v = document.getElementById('configSquadColorInput').value;
+            l.textContent = v === 'custom' ? 'en uso: ' + document.getElementById('configSquadCustomColor').value : 'elegí uno para usarlo';
         }
 
         function renderConfigSlots(slots) {
@@ -1483,6 +1588,7 @@
             sq.name = document.getElementById('configSquadNameInput').value.trim() || 'Escuadra';
             sq.functionType = document.getElementById('configSquadFunctionSelect').value.trim();
             sq.color = document.getElementById('configSquadColorInput').value || 'neonGreen';
+            if (sq.color === 'custom') sq.customColor = document.getElementById('configSquadCustomColor').value;
 
             const roleInputs = document.querySelectorAll('#configSlotsContainer > div');
             const newSlots = [];
@@ -1715,7 +1821,7 @@
             if (!area) return;
 
             html2canvas(area, {
-                backgroundColor: '#020617',
+                backgroundColor: uiTheme.c.bg,
                 scale: 2,
                 ignoreElements: el => !!(el.classList && el.classList.contains('no-capture'))
             }).then(canvas => {
@@ -1726,15 +1832,7 @@
             });
         }
 
-        function changeTheme(themeKey) {
-            const body = document.body;
-            if (themeKey === 'slateCommand') body.className = 'bg-slate-900 text-slate-100 min-h-screen flex flex-col p-2 space-y-2';
-            else if (themeKey === 'deepForest') body.className = 'bg-zinc-950 text-emerald-100 min-h-screen flex flex-col p-2 space-y-2';
-            else if (themeKey === 'midnightPurple') body.className = 'bg-slate-950 text-purple-100 min-h-screen flex flex-col p-2 space-y-2';
-            else if (themeKey === 'amoledBlack') body.className = 'bg-black text-white min-h-screen flex flex-col p-2 space-y-2';
-            else body.className = 'bg-slate-950 text-slate-100 min-h-screen flex flex-col p-2 space-y-2';
-            body.classList.toggle('is-viewer', !canEdit());
-        }
+        function changeTheme(themeKey) { applyPreset(themeKey); }
 
         // =====================================================================
         //  MAPAS · FECHA
@@ -1835,15 +1933,13 @@
             loadUsers();
             const u = findUser(normEmail(localStorage.getItem(SESSION_KEY)));
             if (u && u.status === 'approved' && u.hash) { enterApp(u); return; }
-            // Nunca otorgar Admin por ser el primer visitante de un enlace.
-            // La cuenta administradora debe estar autorizada explícitamente.
-            authMode = 'login';
+            authMode = authUsers.some(a => a.role === 'admin' && a.status === 'approved') ? 'login' : 'setup';
             paintGate();
         }
         function paintGate() {
             const T = {
-                setup: ['Acceso restringido', 'El administrador debe autorizar tu correo. Abrí el enlace de invitación para activar tu cuenta.', 'Entrar', ''],
-                login: ['Acceso', 'Ingresá con tu correo autorizado. Los permisos de administrador no se conceden por abrir el enlace.', 'Entrar', '¿Primera vez o te invitaron? Activar / solicitar acceso'],
+                setup: ['Crear administrador', 'Primera configuración: este correo será el Admin de la app.', 'Crear Admin', ''],
+                login: ['Acceso', 'Ingresá con tu correo autorizado. Rol Invitado: solo lectura.', 'Entrar', '¿Primera vez o te invitaron? Activar / solicitar acceso'],
                 register: ['Activar acceso', 'Usá el correo con el que te invitaron (y el código del mail). Si no figurás en la lista, tu solicitud queda pendiente hasta que un Admin la apruebe.', 'Activar acceso', '← Volver a iniciar sesión']
             }[authMode];
             $id('authTitle').textContent = T[0]; $id('authHint').textContent = T[1];
@@ -1880,9 +1976,9 @@
                 return enterApp(u);
             }
             if (authMode === 'setup') {
-                authMode = 'login';
-                paintGate();
-                return authErr('La creación pública de administradores está deshabilitada. Se requiere autorización explícita.');
+                if (authUsers.some(a => a.role === 'admin' && a.status === 'approved')) { authMode = 'login'; paintGate(); return authErr('Ya existe un Admin. Iniciá sesión.'); }
+                u = { email: em, role: 'admin', status: 'approved' };
+                authUsers.push(u); await setPw(u, pw); saveUsers(); return enterApp(u);
             }
             // register
             if (!u) {
@@ -2000,7 +2096,537 @@
             } catch (err) {}
         });
 
+        // =====================================================================
+        //  LOGO · PERSONALIZACIÓN (paletas / colores / fuente) · ARRASTRAR Y SOLTAR
+        // =====================================================================
+        const RONIN_LOGO = 'data:image/png;base64,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';
+        function paintLogos() {
+            document.querySelectorAll('img[data-logo]').forEach(function(i) { i.src = RONIN_LOGO; });
+            let ic = document.querySelector('link[rel="icon"]');
+            if (!ic) { ic = document.createElement('link'); ic.rel = 'icon'; document.head.appendChild(ic); }
+            ic.href = RONIN_LOGO;
+        }
+        document.addEventListener('DOMContentLoaded', paintLogos);
+
+        // ---------- Paletas ----------
+        const UI_THEME_KEY = 'hll_ui_theme_v1';
+        const UI_PALETTES_KEY = 'hll_ui_palettes_v1';
+        const UI_COLOR_KEYS = [
+            ['bg', 'Fondo'], ['panel', 'Paneles'], ['raised', 'Botones y chips'], ['line', 'Bordes'],
+            ['text', 'Texto'], ['muted', 'Texto secundario'], ['dim', 'Texto tenue'],
+            ['accent', 'Acento principal'], ['accent2', 'Acento secundario'], ['ok', 'Presente / OK']
+        ];
+        const UI_PRESETS = {
+            tacticalDark:   { name: 'Tactical Dark',   c: { bg: '#020617', panel: '#0f172a', raised: '#1e293b', line: '#1e293b', text: '#f1f5f9', muted: '#94a3b8', dim: '#64748b', accent: '#f59e0b', accent2: '#06b6d4', ok: '#34d399' } },
+            slateCommand:   { name: 'Slate Command',   c: { bg: '#0f172a', panel: '#1e293b', raised: '#334155', line: '#334155', text: '#f1f5f9', muted: '#94a3b8', dim: '#64748b', accent: '#38bdf8', accent2: '#f59e0b', ok: '#34d399' } },
+            deepForest:     { name: 'Deep Forest',     c: { bg: '#0b120d', panel: '#121c15', raised: '#1d2b21', line: '#24352a', text: '#e6f2e8', muted: '#8fa896', dim: '#5f7a67', accent: '#a3e635', accent2: '#2dd4bf', ok: '#4ade80' } },
+            midnightPurple: { name: 'Midnight Purple', c: { bg: '#0d0820', panel: '#170f33', raised: '#251a4d', line: '#2d2060', text: '#ede9fe', muted: '#a89fd4', dim: '#766aa6', accent: '#c084fc', accent2: '#22d3ee', ok: '#34d399' } },
+            amoledBlack:    { name: 'AMOLED Black',    c: { bg: '#000000', panel: '#0a0a0a', raised: '#171717', line: '#262626', text: '#fafafa', muted: '#a3a3a3', dim: '#737373', accent: '#f59e0b', accent2: '#22d3ee', ok: '#34d399' } },
+            roninOla:       { name: 'Ronin · Ola',     c: { bg: '#06121f', panel: '#0d2236', raised: '#163450', line: '#1d4466', text: '#eaf4fb', muted: '#8fb3d1', dim: '#5f86a8', accent: '#f0b84a', accent2: '#38bdf8', ok: '#4ade80' } },
+            crimson:        { name: 'Crimson Ops',     c: { bg: '#120709', panel: '#1d0c10', raised: '#2d1218', line: '#3b1a22', text: '#fbeaec', muted: '#c69aa1', dim: '#94666d', accent: '#f43f5e', accent2: '#fbbf24', ok: '#4ade80' } },
+            altoContraste:  { name: 'Alto contraste',  c: { bg: '#000000', panel: '#0a0a0a', raised: '#202020', line: '#8a8a8a', text: '#ffffff', muted: '#d4d4d4', dim: '#a3a3a3', accent: '#ffe600', accent2: '#00e5ff', ok: '#00ff7f' } },
+            desierto:       { name: 'Desierto (claro)', c: { bg: '#efe8d8', panel: '#fbf7ec', raised: '#e4dbc3', line: '#cfc3a3', text: '#2a2415', muted: '#6b6140', dim: '#8f8560', accent: '#b45309', accent2: '#0e7490', ok: '#15803d' } },
+            papel:          { name: 'Papel (claro)',   c: { bg: '#f1f5f9', panel: '#ffffff', raised: '#e2e8f0', line: '#cbd5e1', text: '#0f172a', muted: '#475569', dim: '#64748b', accent: '#d97706', accent2: '#0284c7', ok: '#059669' } }
+        };
+        const UI_FONTS = {
+            inter:    { name: 'Inter (por defecto)', css: "'Inter', sans-serif", gf: null },
+            barlow:   { name: 'Barlow (compacta)',   css: "'Barlow Semi Condensed', 'Barlow', sans-serif", gf: 'Barlow+Semi+Condensed:wght@400;500;600;700&family=Barlow:wght@400;500;600;700' },
+            rajdhani: { name: 'Rajdhani (táctica)',  css: "'Rajdhani', sans-serif", gf: 'Rajdhani:wght@400;500;600;700' },
+            oxanium:  { name: 'Oxanium (militar)',   css: "'Oxanium', sans-serif", gf: 'Oxanium:wght@400;500;600;700' },
+            plex:     { name: 'IBM Plex Mono',       css: "'IBM Plex Mono', monospace", gf: 'IBM+Plex+Mono:wght@400;500;600;700' },
+            system:   { name: 'Del sistema',         css: "system-ui, -apple-system, 'Segoe UI', sans-serif", gf: null }
+        };
+        const UI_RADII = {
+            sharp:  { name: 'Cuadradas',    r: ['0', '0', '0', '0'] },
+            normal: { name: 'Normales',     r: null },
+            round:  { name: 'Redondeadas',  r: ['8px', '10px', '14px', '20px'] }
+        };
+        const UI_HEX = /^#[0-9a-f]{6}$/i;
+
+        function uiDefaultTheme() { return { preset: 'tacticalDark', c: Object.assign({}, UI_PRESETS.tacticalDark.c), font: 'inter', radius: 'normal' }; }
+        let uiTheme = uiDefaultTheme();
+        let uiPalettes = [];
+
+        // Valida cualquier tema que venga de localStorage o de un código pegado (solo hex válidos y claves conocidas)
+        function uiSanitize(t) {
+            const out = uiDefaultTheme();
+            if (!t || typeof t !== 'object') return out;
+            const src = t.c && typeof t.c === 'object' ? t.c : {};
+            UI_COLOR_KEYS.forEach(function(k) { if (typeof src[k[0]] === 'string' && UI_HEX.test(src[k[0]])) out.c[k[0]] = src[k[0]].toLowerCase(); });
+            out.font = UI_FONTS[t.font] ? t.font : 'inter';
+            out.radius = UI_RADII[t.radius] ? t.radius : 'normal';
+            out.preset = (typeof t.preset === 'string' && (UI_PRESETS[t.preset] || t.preset === 'custom')) ? t.preset : 'custom';
+            return out;
+        }
+        function loadUiTheme() {
+            try { uiTheme = uiSanitize(JSON.parse(localStorage.getItem(UI_THEME_KEY) || 'null')); } catch (e) { uiTheme = uiDefaultTheme(); }
+            try {
+                const arr = JSON.parse(localStorage.getItem(UI_PALETTES_KEY) || '[]');
+                uiPalettes = (Array.isArray(arr) ? arr : []).slice(0, 20).map(function(p) {
+                    const s = uiSanitize(p);
+                    s.name = String((p && p.name) || 'Paleta').slice(0, 30);
+                    return s;
+                });
+            } catch (e) { uiPalettes = []; }
+        }
+        function saveUiTheme() { try { localStorage.setItem(UI_THEME_KEY, JSON.stringify(uiTheme)); } catch (e) {} }
+        function saveUiPalettes() { try { localStorage.setItem(UI_PALETTES_KEY, JSON.stringify(uiPalettes)); } catch (e) {} }
+
+        // Utilidades de color
+        function uiRgb(h) { h = String(h).replace('#', ''); return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]; }
+        function uiHex(r, g, b) { return '#' + [r, g, b].map(function(v) { return Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0'); }).join(''); }
+        function uiRgba(h, a) { const c = uiRgb(h); return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a + ')'; }
+        function uiMix(a, b, t) { const x = uiRgb(a), y = uiRgb(b); return uiHex(x[0] + (y[0] - x[0]) * t, x[1] + (y[1] - x[1]) * t, x[2] + (y[2] - x[2]) * t); }
+        function uiLum(h) {
+            const c = uiRgb(h).map(function(v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+            return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+        }
+
+        // Genera el CSS que reemplaza los colores slate/amber/cyan/emerald de Tailwind por los de la paleta activa.
+        // Las escuadras (.sq-card) y los botones de color neón (.keep-color) conservan sus colores propios.
+        function uiBuildCss() {
+            const c = uiTheme.c;
+            const dark = uiLum(c.bg) < 0.35;
+            const lift = dark ? '#ffffff' : '#000000';
+            const on = uiLum(c.accent) > 0.4 ? '#0b1220' : '#ffffff';
+            const a = uiRgba;
+            const rules = [];
+            const esc = function(s) { return s.replace(/[\/:]/g, '\\$&'); };
+            const sel = function(cls, extra) {
+                const pseudo = cls.indexOf('hover:') === 0 ? ':hover' : (cls.indexOf('focus:') === 0 ? ':focus' : '');
+                return 'html .' + esc(cls) + (extra || '') + pseudo;
+            };
+            const put = function(list, prop, extra) { list.forEach(function(p) { rules.push(sel(p[0], extra) + '{' + prop + ':' + p[1] + ' !important}'); }); };
+            const KEEP = ':not(.keep-color)';
+            const NOCARD = ':not(.keep-color):not(.sq-card)';
+
+            put([
+                ['bg-slate-950', c.bg], ['bg-slate-950/80', a(c.bg, .8)], ['bg-slate-950/40', a(c.bg, .4)],
+                ['bg-slate-900', c.panel], ['bg-slate-900/90', a(c.panel, .9)], ['bg-slate-900/80', a(c.panel, .8)], ['bg-slate-900/40', a(c.panel, .4)],
+                ['bg-slate-800', c.raised], ['hover:bg-slate-800', c.raised], ['hover:bg-slate-700', uiMix(c.raised, c.text, .14)]
+            ], 'background-color');
+            put([
+                ['bg-amber-500', c.accent], ['hover:bg-amber-400', uiMix(c.accent, lift, .18)], ['hover:bg-amber-500', c.accent],
+                ['bg-amber-600', uiMix(c.accent, '#000000', .12)], ['bg-amber-500/20', a(c.accent, .2)], ['bg-amber-600/20', a(c.accent, .2)],
+                ['hover:bg-amber-600/30', a(c.accent, .3)], ['bg-amber-950/30', a(c.accent, .1)],
+                ['bg-cyan-600', uiMix(c.accent2, '#000000', .18)], ['bg-cyan-700', uiMix(c.accent2, '#000000', .35)],
+                ['hover:bg-cyan-600', uiMix(c.accent2, '#000000', .18)], ['hover:bg-cyan-500', c.accent2],
+                ['bg-emerald-600', uiMix(c.ok, '#000000', .3)], ['hover:bg-emerald-500', uiMix(c.ok, '#000000', .15)], ['hover:bg-emerald-600', uiMix(c.ok, '#000000', .3)],
+                ['bg-emerald-600/20', a(c.ok, .2)], ['hover:bg-emerald-600/30', a(c.ok, .3)], ['bg-emerald-500/20', a(c.ok, .2)], ['bg-emerald-950/40', a(c.ok, .12)]
+            ], 'background-color', KEEP);
+
+            put([
+                ['text-slate-100', c.text], ['hover:text-slate-200', c.text], ['hover:text-white', c.text],
+                ['text-slate-300', uiMix(c.text, c.muted, .5)], ['text-slate-400', c.muted], ['text-slate-500', c.dim],
+                ['text-slate-600', uiMix(c.dim, c.bg, .4)], ['text-slate-950', on]
+            ], 'color');
+            put([['text-slate-200', c.text]], 'color', NOCARD);
+            put([
+                ['text-amber-400', c.accent], ['text-amber-300', uiMix(c.accent, lift, .25)], ['hover:text-amber-300', uiMix(c.accent, lift, .25)],
+                ['text-cyan-400', c.accent2], ['text-cyan-300', uiMix(c.accent2, lift, .25)],
+                ['text-emerald-400', c.ok], ['text-emerald-300', uiMix(c.ok, lift, .2)]
+            ], 'color', NOCARD);
+
+            put([
+                ['border-slate-800', c.line], ['border-slate-800/80', a(c.line, .8)], ['border-slate-700', uiMix(c.line, c.text, .14)],
+                ['border-slate-600', uiMix(c.line, c.text, .28)], ['border-slate-900', uiMix(c.bg, c.line, .5)]
+            ], 'border-color', NOCARD);
+            put([
+                ['focus:border-cyan-500', c.accent2], ['hover:border-cyan-500', c.accent2], ['focus:border-amber-500', c.accent],
+                ['border-amber-500/30', a(c.accent, .3)], ['border-amber-500/40', a(c.accent, .4)],
+                ['border-emerald-500/30', a(c.ok, .3)], ['border-emerald-800/50', a(c.ok, .3)]
+            ], 'border-color', KEEP);
+            put([['border-l-amber-500/70', a(c.accent, .7)]], 'border-left-color', KEEP);
+            put([['accent-emerald-500', c.ok]], 'accent-color');
+
+            rules.push('html{color-scheme:' + (dark ? 'dark' : 'light') + '}');
+            rules.push('html input[type="datetime-local"]{color-scheme:' + (dark ? 'dark' : 'light') + ' !important}');
+            rules.push('html body{background-color:' + c.bg + ' !important;color:' + c.text + ' !important}');
+            rules.push('html .custom-scrollbar::-webkit-scrollbar-thumb{background:' + a(c.text, .25) + ' !important}');
+            rules.push('html .custom-scrollbar::-webkit-scrollbar-track{background:' + a(c.text, .06) + ' !important}');
+            rules.push('html{--accent:' + c.accent + ';--dim:' + c.dim + '}');
+
+            const f = UI_FONTS[uiTheme.font] || UI_FONTS.inter;
+            rules.push('html body, html input, html select, html textarea, html button{font-family:' + f.css + ' !important}');
+
+            const rd = UI_RADII[uiTheme.radius];
+            if (rd && rd.r) {
+                ['rounded', 'rounded-md', 'rounded-lg', 'rounded-xl'].forEach(function(k, i) { rules.push('html .' + k + '{border-radius:' + rd.r[i] + ' !important}'); });
+            }
+            return rules.join('\n');
+        }
+
+        function uiLoadFont() {
+            const f = UI_FONTS[uiTheme.font] || UI_FONTS.inter;
+            let link = document.getElementById('uiFontLink');
+            if (!f.gf) { if (link) link.remove(); return; }
+            const href = 'https://fonts.googleapis.com/css2?family=' + f.gf + '&display=swap';
+            if (!link) { link = document.createElement('link'); link.id = 'uiFontLink'; link.rel = 'stylesheet'; document.head.appendChild(link); }
+            if (link.getAttribute('href') !== href) link.setAttribute('href', href);
+        }
+        function applyUiTheme(save) {
+            const st = document.getElementById('uiThemeStyle');
+            if (st) st.textContent = uiBuildCss();
+            uiLoadFont();
+            if (save !== false) saveUiTheme();
+        }
+
+        function applyPreset(key) {
+            const p = UI_PRESETS[key];
+            if (!p) return;
+            uiTheme.preset = key;
+            uiTheme.c = Object.assign({}, p.c);
+            applyUiTheme();
+            renderThemeModal();
+        }
+        function setUiColor(key, val) {
+            if (!UI_HEX.test(val) || !uiTheme.c.hasOwnProperty(key)) return;
+            uiTheme.c[key] = val.toLowerCase();
+            uiTheme.preset = 'custom';
+            applyUiTheme();
+            const h = document.querySelector('[data-hex="' + key + '"]');
+            if (h) h.textContent = val.toLowerCase();
+            renderPresetGrid();
+        }
+        function setUiFont(v) { if (!UI_FONTS[v]) return; uiTheme.font = v; applyUiTheme(); }
+        function setUiRadius(v) { if (!UI_RADII[v]) return; uiTheme.radius = v; applyUiTheme(); }
+        function resetUiTheme() {
+            uiTheme = uiDefaultTheme();
+            applyUiTheme();
+            renderThemeModal();
+            showToast('🎨 Colores restablecidos');
+        }
+
+        function uiSwatches(c) {
+            return ['bg', 'panel', 'accent', 'accent2', 'text'].map(function(k) { return '<i class="theme-swatch" style="background:' + c[k] + '"></i>'; }).join('');
+        }
+        function renderPresetGrid() {
+            const g = document.getElementById('presetGrid');
+            if (!g) return;
+            g.innerHTML = Object.keys(UI_PRESETS).map(function(k) {
+                const p = UI_PRESETS[k];
+                const on = uiTheme.preset === k;
+                return '<button type="button" onclick="applyPreset(\'' + k + '\')" class="text-left rounded px-1.5 py-1 flex flex-col gap-1" style="background:' + p.c.panel + ';color:' + p.c.text +
+                    ';border:2px solid ' + (on ? uiTheme.c.accent : p.c.line) + '"><span class="flex gap-0.5">' + uiSwatches(p.c) + '</span><span class="text-[10px] font-semibold">' + p.name + (on ? ' ✓' : '') + '</span></button>';
+            }).join('');
+        }
+        function renderMyPalettes() {
+            const box = document.getElementById('myPalettes');
+            if (!box) return;
+            box.innerHTML = uiPalettes.length ? uiPalettes.map(function(p, i) {
+                return '<div class="flex items-center justify-between gap-2 bg-slate-950 border border-slate-800 rounded px-2 py-1"><span class="flex items-center gap-2 min-w-0"><span class="flex gap-0.5 shrink-0">' + uiSwatches(p.c) +
+                    '</span><span class="text-[10px] text-slate-200 truncate">' + escapeHtml(p.name) + '</span></span><span class="flex gap-1 shrink-0"><button type="button" onclick="applyMyPalette(' + i +
+                    ')" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] px-2 py-0.5 rounded">Usar</button><button type="button" onclick="deleteMyPalette(' + i +
+                    ')" class="text-slate-500 hover:text-red-400 text-[11px] px-1" aria-label="Borrar paleta">✕</button></span></div>';
+            }).join('') : '<div class="text-[10px] text-slate-500 italic">Todavía no guardaste ninguna paleta propia.</div>';
+        }
+        function renderThemeModal() {
+            const colors = document.getElementById('uiColors');
+            if (!colors) return;
+            renderPresetGrid();
+            colors.innerHTML = UI_COLOR_KEYS.map(function(k) {
+                const v = uiTheme.c[k[0]];
+                return '<label class="flex items-center justify-between gap-2 bg-slate-950 border border-slate-800 rounded px-2 py-1 cursor-pointer"><span class="text-[10px] text-slate-300">' + k[1] +
+                    '</span><span class="flex items-center gap-1.5"><span class="text-[9px] font-mono text-slate-500" data-hex="' + k[0] + '">' + v +
+                    '</span><input type="color" value="' + v + '" oninput="setUiColor(\'' + k[0] + '\', this.value)" class="w-7 h-5 p-0 border-0 bg-transparent cursor-pointer"></span></label>';
+            }).join('');
+            const fs = document.getElementById('uiFontSel');
+            fs.innerHTML = Object.keys(UI_FONTS).map(function(k) { return '<option value="' + k + '"' + (uiTheme.font === k ? ' selected' : '') + '>' + UI_FONTS[k].name + '</option>'; }).join('');
+            document.getElementById('uiRadiusSel').value = uiTheme.radius;
+            renderMyPalettes();
+        }
+        function openThemeModal() { renderThemeModal(); document.getElementById('themeModal').classList.remove('hidden'); }
+        function closeThemeModal() { document.getElementById('themeModal').classList.add('hidden'); }
+
+        function savePalette() {
+            const inp = document.getElementById('palName');
+            let name = (inp.value || '').trim().slice(0, 30) || ('Paleta ' + (uiPalettes.length + 1));
+            const entry = { name: name, preset: 'custom', c: Object.assign({}, uiTheme.c), font: uiTheme.font, radius: uiTheme.radius };
+            const at = uiPalettes.findIndex(function(p) { return p.name.toLowerCase() === name.toLowerCase(); });
+            if (at >= 0) uiPalettes[at] = entry;
+            else if (uiPalettes.length >= 20) { showToast('Máximo 20 paletas guardadas: borrá alguna primero'); return; }
+            else uiPalettes.push(entry);
+            saveUiPalettes();
+            inp.value = '';
+            renderMyPalettes();
+            showToast('🎨 Paleta "' + name + '" guardada');
+        }
+        function applyMyPalette(i) {
+            const p = uiPalettes[i];
+            if (!p) return;
+            uiTheme = uiSanitize(p);
+            uiTheme.preset = 'custom';
+            applyUiTheme();
+            renderThemeModal();
+        }
+        function deleteMyPalette(i) {
+            uiPalettes.splice(i, 1);
+            saveUiPalettes();
+            renderMyPalettes();
+        }
+        function exportPalette() {
+            const payload = { name: 'Ronin', c: uiTheme.c, font: uiTheme.font, radius: uiTheme.radius };
+            const code = 'RONIN1:' + btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+            const ta = document.getElementById('paletteCode');
+            ta.value = code;
+            ta.focus(); ta.select();
+            try { if (navigator.clipboard) navigator.clipboard.writeText(code).catch(function() {}); } catch (e) {}
+            showToast('Código generado: pasáselo a quien quieras');
+        }
+        function importPalette() {
+            const raw = (document.getElementById('paletteCode').value || '').trim();
+            try {
+                if (raw.indexOf('RONIN1:') !== 0) throw new Error('prefijo');
+                const data = JSON.parse(decodeURIComponent(escape(atob(raw.slice(7)))));
+                if (!data || typeof data.c !== 'object') throw new Error('formato');
+                const bad = UI_COLOR_KEYS.some(function(k) { return typeof data.c[k[0]] !== 'string' || !UI_HEX.test(data.c[k[0]]); });
+                if (bad) throw new Error('color');
+                uiTheme = uiSanitize({ c: data.c, font: data.font, radius: data.radius, preset: 'custom' });
+                applyUiTheme();
+                renderThemeModal();
+                showToast('🎨 Paleta aplicada');
+            } catch (e) {
+                showToast('Ese código no es válido');
+            }
+        }
+
+        // ---------- Arrastrar y soltar jugadores ----------
+        // Orígenes/destinos: asiento de escuadra (slot), jugador de la banca (benchitem), panel de banca (bench), asiento de nodos (node).
+        // Soltar sobre un asiento ocupado intercambia a los dos; soltar sobre la banca libera el asiento.
+        // Los nodos son una asignación extra: se COPIA el jugador y sigue en su escuadra.
+        // Además hay modo "tocar y tocar" (⠿ y luego el destino) para pantallas táctiles.
+        let dndSrc = null, dndSel = null, dndOverEl = null;
+
+        function dndDesc(el) {
+            if (!el || !el.dataset) return null;
+            const t = el.dataset.dnd;
+            if (t === 'slot') return { type: 'slot', sq: el.dataset.sq, i: +el.dataset.i };
+            if (t === 'benchitem') return { type: 'benchitem', i: +el.dataset.i };
+            if (t === 'bench') return { type: 'bench' };
+            if (t === 'node') return { type: 'node', h: +el.dataset.h, i: +el.dataset.i };
+            return null;
+        }
+        function dndEl(d) {
+            if (!d) return null;
+            if (d.type === 'slot') return document.querySelector('[data-dnd="slot"][data-sq="' + d.sq + '"][data-i="' + d.i + '"]');
+            if (d.type === 'benchitem') return document.querySelector('[data-dnd="benchitem"][data-i="' + d.i + '"]');
+            if (d.type === 'node') return document.querySelector('[data-dnd="node"][data-h="' + d.h + '"][data-i="' + d.i + '"]');
+            return null;
+        }
+        function dndSlotObj(m, d) { const s = m.squads.find(function(x) { return x.id === d.sq; }); return s ? s.slots[d.i] : null; }
+        function dndNodeObj(m, d) { const h = m.nodePlan && m.nodePlan[d.h]; return h ? h.slots[d.i] : null; }
+        function dndPlayer(d) {
+            const m = getCurrentMatch();
+            let v = '';
+            if (d.type === 'slot') { const s = dndSlotObj(m, d); v = s ? s.player : ''; }
+            else if (d.type === 'benchitem') v = m.bench[d.i];
+            else if (d.type === 'node') { const n = dndNodeObj(m, d); v = n ? n.player : ''; }
+            return String(v || '').trim();
+        }
+        function dndSame(a, b) {
+            if (!a || !b || a.type !== b.type) return false;
+            if (a.type === 'slot') return a.sq === b.sq && a.i === b.i;
+            if (a.type === 'benchitem') return a.i === b.i;
+            if (a.type === 'node') return a.h === b.h && a.i === b.i;
+            return a.type === 'bench';
+        }
+        // Destino real: sobre un jugador de la banca solo cuenta como "reordenar" si el origen también es de la banca
+        function dndTarget(node, src) {
+            let el = node && node.closest ? node.closest('[data-dnd]') : null;
+            if (!el) return null;
+            let d = dndDesc(el);
+            if (d && d.type === 'benchitem' && src && src.type !== 'benchitem') { el = el.closest('[data-dnd="bench"]') || el; d = dndDesc(el); }
+            return d ? { el: el, d: d } : null;
+        }
+        function dndSetOver(el) {
+            if (dndOverEl === el) return;
+            if (dndOverEl) dndOverEl.classList.remove('dnd-over');
+            dndOverEl = el;
+            if (el) el.classList.add('dnd-over');
+        }
+        function dndEnd() {
+            document.querySelectorAll('.dnd-dragging').forEach(function(e) { e.classList.remove('dnd-dragging'); });
+            dndSetOver(null);
+            dndSrc = null;
+        }
+        function dndSelClear() {
+            const e = dndEl(dndSel);
+            if (e) e.classList.remove('dnd-sel');
+            dndSel = null;
+        }
+        function dndMark() {
+            if (!dndSel) return;
+            const e = dndEl(dndSel);
+            if (!e || !dndPlayer(dndSel)) { dndSel = null; return; }
+            e.classList.add('dnd-sel');
+        }
+
+        function dndMove(src, dst) {
+            if (!guard()) return false;
+            const m = getCurrentMatch();
+            const name = dndPlayer(src);
+            if (!name || dndSame(src, dst)) return false;
+            const lc = function(s) { return String(s || '').trim().toLowerCase(); };
+            const squadHolder = function(n) {
+                for (const sq of m.squads) for (const sl of sq.slots) if (lc(sl.player) === lc(n)) return { sq: sq, sl: sl };
+                return null;
+            };
+            let msg = '';
+
+            if (dst.type === 'benchitem' && src.type !== 'benchitem') dst = { type: 'bench' };
+
+            if (src.type === 'slot') {
+                const a = dndSlotObj(m, src);
+                if (!a) return false;
+                if (dst.type === 'slot') {
+                    const b = dndSlotObj(m, dst);
+                    if (!b || b.off) return false;
+                    const other = String(b.player || '').trim();
+                    const bp = !!b.present;
+                    b.player = a.player; b.present = !!a.present;
+                    a.player = other; a.present = bp;
+                    msg = other ? name + ' ⇄ ' + other : name + ' → ' + b.role;
+                } else if (dst.type === 'bench' || dst.type === 'benchitem') {
+                    benchAddPlayer(m, name);
+                    a.player = ''; a.present = false;
+                    msg = name + ' pasó a la banca';
+                } else if (dst.type === 'node') {
+                    const n = dndNodeObj(m, dst);
+                    if (!n) return false;
+                    n.player = name;
+                    msg = name + ' también en ' + m.nodePlan[dst.h].title;
+                }
+            } else if (src.type === 'benchitem') {
+                if (dst.type === 'slot') {
+                    const b = dndSlotObj(m, dst);
+                    if (!b || b.off) return false;
+                    const prev = String(b.player || '').trim();
+                    m.bench.splice(src.i, 1);
+                    b.player = name; b.present = false;
+                    if (prev) benchAddPlayer(m, prev);
+                    msg = name + ' → ' + b.role + (prev ? ' · ' + prev + ' pasó a la banca' : '');
+                } else if (dst.type === 'benchitem' || dst.type === 'bench') {
+                    const item = m.bench.splice(src.i, 1)[0];
+                    let at = dst.type === 'bench' ? m.bench.length : (src.i < dst.i ? dst.i - 1 : dst.i);
+                    m.bench.splice(at, 0, item);
+                } else if (dst.type === 'node') {
+                    const n = dndNodeObj(m, dst);
+                    if (!n) return false;
+                    n.player = name;
+                    msg = name + ' asignado a ' + m.nodePlan[dst.h].title;
+                }
+            } else if (src.type === 'node') {
+                if (dst.type === 'slot') {
+                    const b = dndSlotObj(m, dst);
+                    if (!b || b.off) return false;
+                    const holder = squadHolder(name);
+                    if (holder && holder.sl !== b) { showToast(name + ' ya está en ' + holder.sq.name + ' (' + holder.sl.role + ')'); return false; }
+                    const prev = String(b.player || '').trim();
+                    b.player = name; b.present = false;
+                    m.bench = m.bench.filter(function(p) { return lc(p) !== lc(name); });
+                    if (prev) benchAddPlayer(m, prev);
+                    msg = name + ' → ' + b.role;
+                } else if (dst.type === 'node') {
+                    const a = dndNodeObj(m, src), b = dndNodeObj(m, dst);
+                    if (!a || !b) return false;
+                    const t = b.player || '';
+                    b.player = a.player; a.player = t;
+                    msg = t ? name + ' ⇄ ' + t : name + ' → ' + m.nodePlan[dst.h].title;
+                } else {
+                    const a = dndNodeObj(m, src);
+                    if (!a) return false;
+                    a.player = '';
+                    if (!squadHolder(name)) benchAddPlayer(m, name);
+                    msg = name + ' quitado de nodos';
+                }
+            } else return false;
+
+            saveState();
+            renderAll();
+            if (msg) showToast(msg);
+            return true;
+        }
+
+        document.addEventListener('dragstart', function(e) {
+            const h = e.target && e.target.closest ? e.target.closest('[draggable="true"]') : null;
+            if (!h || !canEdit()) return;
+            const row = h.closest('[data-dnd]');
+            const d = dndDesc(row);
+            if (!d || d.type === 'bench') return;
+            if (!dndPlayer(d)) { e.preventDefault(); return; }
+            dndSelClear();
+            dndSrc = d;
+            try {
+                e.dataTransfer.effectAllowed = 'copyMove';
+                e.dataTransfer.setData('text/plain', dndPlayer(d));
+                e.dataTransfer.setDragImage(row, 12, 10);
+            } catch (x) {}
+            row.classList.add('dnd-dragging');
+        });
+        document.addEventListener('dragover', function(e) {
+            if (!dndSrc) return;
+            const t = dndTarget(e.target, dndSrc);
+            if (!t || dndSame(dndSrc, t.d)) { dndSetOver(null); return; }
+            e.preventDefault();
+            try { e.dataTransfer.dropEffect = (t.d.type === 'node' || dndSrc.type === 'node') ? 'copy' : 'move'; } catch (x) {}
+            dndSetOver(t.el);
+        });
+        document.addEventListener('drop', function(e) {
+            if (!dndSrc) return;
+            const src = dndSrc;
+            const t = dndTarget(e.target, src);
+            dndEnd();
+            if (!t) return;
+            e.preventDefault();
+            dndMove(src, t.d);
+        });
+        document.addEventListener('dragend', dndEnd);
+
+        // Modo "tocar y tocar": ⠿ en el jugador y después en el destino
+        document.addEventListener('click', function(e) {
+            if (!canEdit() || !e.target || !e.target.closest) return;
+            const grip = e.target.closest('.dnd-grip');
+            if (!dndSel) {
+                if (!grip) return;
+                const d = dndDesc(grip.closest('[data-dnd]'));
+                if (!d || d.type === 'bench') return;
+                const who = dndPlayer(d);
+                if (!who) return;
+                dndSel = d;
+                dndMark();
+                showToast('Elegí dónde poner a ' + who + ' (Esc cancela)');
+                return;
+            }
+            const t = dndTarget(e.target, dndSel);
+            if (!t) { if (!e.target.closest('#appToast')) { dndSelClear(); } return; }
+            if (!grip && e.target.closest('input, button, select, textarea, a, label')) return;
+            const src = dndSel;
+            dndSelClear();
+            if (dndSame(src, t.d)) return;
+            e.preventDefault();
+            dndMove(src, t.d);
+        });
+        document.addEventListener('keydown', function(e) {
+            if (e.key !== 'Escape') return;
+            const tm = document.getElementById('themeModal');
+            if (tm && !tm.classList.contains('hidden')) { closeThemeModal(); return; }
+            if (dndSel) dndSelClear();
+        });
+
+        // Tras cada render: marca la selección y completa la cabecera de la captura (logo + título + fecha + mapa)
+        const __uiRenderAll = renderAll;
+        renderAll = function() {
+            __uiRenderAll();
+            const m = getCurrentMatch();
+            const t = document.getElementById('capTitle'), mm = document.getElementById('capMeta');
+            if (t) t.textContent = m.title || '';
+            if (mm) mm.textContent = [m.date, m.map].filter(Boolean).join(' · ');
+            dndMark();
+        };
+
         window.addEventListener('DOMContentLoaded', function() {
+            loadUiTheme();
+            applyUiTheme(false);
             initAuth();
         });
     </script>
@@ -2008,152 +2634,5 @@
 // Listado Maestro (hoja LISTADO MAESTRO): [nick, grado, actividad]
 const DEFAULT_CLAN_DB = [["-🆁- justjorge","RONIN","Activo"],["-🆁- Cdte. Negroni","RONIN","Ausente con Aviso"],["-🆁- Tanz","Reserva","Inactivo"],["-🆁- LeonmarT","RONIN","Activo"],["-🆁- Amaleon","Reserva","Inactivo"],["-🆁- Droxaude","Reserva","Game Inactivo"],["-🆁- Misil de Levadura","Reserva","Inactivo"],["-🆁- Werxtrax","RONIN","Activo"],["-🆁- ZARGOTHRAX","Reserva","Inactivo"],["Belion","Clan Aliado","Inactivo"],["-🆁- Infamous","RONIN","Activo"],["-TL- Gato","Reserva","Game Inactivo"],["-🆁- Alvatronik","Reserva","Inactivo"],["-🆁- Meeiko","Reserva","Inactivo"],["-🆁- Jhonny Blade","Reserva","Inactivo"],["-🆁- kashowa","Reserva","Inactivo"],["-🆁- Motherfucket Jones","Reserva","Inactivo"],["-🆁- GOLD","Reserva","Inactivo"],["-🆁- AleeeARG","Reserva","Inactivo"],["-🆁- Exocet89","Reserva","Inactivo"],["-🆁- Keltaah","Clan Aliado","Inactivo"],["-🆁ec- Cocalapro","Reserva","Inactivo"],["-🆁- Chango","Reserva","Inactivo"],["-🆁- Cris_Nv","RONIN","Inactivo"],["-🆁- Gordoansioso","Reserva","Inactivo"],["-🆁- Fernixhawx","RONIN","Activo"],["-🆁- Mike-Sama","RONIN","Game Inactivo"],["-🆁- Inƒan৳e","Reserva","Inactivo"],["-🆁- Comunero","RONIN","Activo"],["-🆁- Coman C","RONIN","Inactivo"],["-🆁- Darwin","RONIN","Inactivo"],["-🆁- Waska","Reserva","Inactivo"],["-🆁- SirDaniel","Reserva","Inactivo"],["-🆁- Hanna Montana","Reserva","Inactivo"],["-🆁- Kaplan","Reserva","Inactivo"],["-🆁- MAXIZ-736","Reserva","Inactivo"],["-🆁ec- Hijo de su puta madre","Reserva","Inactivo"],["-🆁- Julio A. Roca","Reserva","Ausente con Aviso"],["-🆁ec- Dr.Monkhouse","Reserva","Inactivo"],["-🆁ec- Zantucho","Reserva","Inactivo"],["-🆁- Buckethead","RONIN","Inactivo"],["-🆁- TINTAZO","Reserva","Ausente con Aviso"],["Rumia","Clan Aliado","Inactivo"],["-🆁- Pecci13","RONIN","Activo"],["-🆁ec- the_chesterfield","Reserva","Inactivo"],["Barbita","Reserva","Inactivo"],["-🆁ec- Fabrizo","Reserva","Inactivo"],["-🆁- sid69","Reserva","Inactivo"],["-🆁ec- Chilotiao","Reserva","Inactivo"],["-🆁ec- Estratego","Reserva","Inactivo"],["-🆁ec- MayoFranik","Reserva","Inactivo"],["-🆁- Pardo","Reserva","Inactivo"],["-🆁- Zeus25","Reserva","Discord Inactivo"],["-🆁- Maxi Neder","RONIN","Activo"],["-🆁ec Alan_re22","Reserva","Inactivo"],["-🆁- Jeison","RONIN","Discord Inactivo"],["-🆁- Gonza","RONIN","Discord Inactivo"],["-🆁- Cnel. David","RONIN","Discord Inactivo"],["-🆁ec- ciinatic","Reserva","Inactivo"],["-🆁- ftr","Reserva","Inactivo"],["-🆁ec- Maniac Ricochet","Reserva","Inactivo"],["-🆁- Astrom","Reserva","Inactivo"],["-🆁- Darksoldier","RONIN","Activo"],["-🆁ec- ADRCR93","Reserva","Inactivo"],["-🆁ec- Jutini","Aspirante","Inactivo"],["-🆁- M a r i l y n","RONIN","Activo"],["-🆁ec- ElCamaradaRuso","Reserva","Inactivo"],["-🆁ec- Mlicusatti","Reserva","Inactivo"],["-🆁ec- ElColipato69","Reserva","Inactivo"],["-🆁ec- Eredok","Reserva","Inactivo"],["-🆁- Lesharx™","RONIN","Activo"],["-🆁- Uli_casla","Reserva","Inactivo"],["Salva","No Determinado","Inactivo"],["-🆁ec- obrero","Reserva","Inactivo"],["WTH Serpo","Clan Aliado","Inactivo"],["-🆁ec- Shatobili","Reserva","Inactivo"],["-🆁- futuredj","Reserva","Inactivo"],["[VNGD] TRUX","Clan Aliado","Inactivo"],["-🆁- Pulga","Reserva","Inactivo"],["-🆁ec- Ace","Reserva","Inactivo"],["-🆁ec- DELTA","Reserva","Inactivo"],["-🆁ec- narkikurru","Reserva","Inactivo"],["| CTM | CuchiLuna","Clan Aliado","Inactivo"],["-🆁ec- 'Matooooooo Reserva.","Reserva","Inactivo"],["-🆁ec- Ramón","Reserva","Inactivo"],["-🆁ec- 33333","Reserva","Inactivo"],["-🆁ec- De Paul","Reserva","Inactivo"],["-🆁ec- Koky","Reserva","Inactivo"],["-🆁- jK","Reserva","Inactivo"],["-🆁- Hackerdsl","Reserva","Inactivo"],["-🆁ec- Bondiola Department","Reserva","Inactivo"],["-🆁ec- Foncareth","Reserva","Inactivo"],["-🆁- DuBu (tuki)","RONIN","Inactivo"],["-🆁- Robino","Reserva","Inactivo"],["-🆁ec- Dr. Bilardo","Reserva","Inactivo"],["-🆁- Fafa","Reserva","Inactivo"],["-🆁ec- maurovp","Reserva","Inactivo"],["-🆁ec- IMANOL","Reserva","Inactivo"],["-🆁- Kiraarthas","Recluta","Inactivo"],["-🆁- dACER;","Reserva","Inactivo"],["-🆁ec- Mike Tyson","Reserva","Inactivo"],["-🆁ec- LucasBot","Reserva","Inactivo"],["-🆁ec- Venhit","Reserva","Inactivo"],["-🆁ec- Shoz","Reserva","Inactivo"],["-🆁ec- SR.Churrito","Reserva","Inactivo"],["-🆁ec- EsseEsse8","Reserva","Inactivo"],["-🆁- SINDRAMA","Reserva","Inactivo"],["-🆁- PETUCO","RONIN","Activo"],["-🆁ec- ZeroCool","Reserva","Inactivo"],["-🆁ec- franvilla03","Reserva","Inactivo"],["-🆁- Petrus","RONIN","Inactivo"],["-🆁ec badcow13","Reserva","Inactivo"],["-🆁ec- Elmalamensky","Reserva","Inactivo"],["-🆁ec- Guiso de waska","Reserva","Game Inactivo"],["-🆁ec NicoArg","Reserva","Inactivo"],["-🆁ec- Kalt","Reserva","Inactivo"],["360 | IGNA","Reserva","Inactivo"],["-🆁- El pollito pío","Reserva","Inactivo"],["-🆁ec- Reloco","Reserva","Inactivo"],["Ξnacho","Clan Aliado","Inactivo"],["360 | Blood Drakker","Clan Aliado","Inactivo"],["Yasked","Reserva","Inactivo"],["-🆁ec- Paitox","Reserva","Inactivo"],["-🆁ec- Axee","Reserva","Inactivo"],["goldstar Merc","Clan Aliado","No determinado"],["-🆁ec- Teshy","Reserva","Inactivo"],["-🆁ec- Acertijo","Reserva","Inactivo"],["-🆁ec- Ayet.PBB","Reserva","Inactivo"],["-🆁ec- SrGato","Reserva","Inactivo"],["-🆁ec- Rengoroso","Reserva","Inactivo"],["-🆁ec- Juan Cruz","Reserva","Inactivo"],["-🆁ec- RODIA","Reserva","Inactivo"],["-🆁- TachanKakV","Reserva","Inactivo"],["-🆁ec- Limonagrio","Reserva","Inactivo"],["-🆁ec- spaceboyyCL","Reserva","Inactivo"],["-🆁ec- Euler","Reserva","Inactivo"],["-🆁ec- kibirid","Reserva","Inactivo"],["-🆁ec- Joel","Reserva","Inactivo"],["-🆁ec- Leandro","Reserva","Inactivo"],["-🆁ec- El Chino","Reserva","Inactivo"],["-🆁ec- Cruzvdo","Reserva","Inactivo"],["-🆁- Chaqueño","Clan Aliado","Inactivo"],["-🆁ec- FerAcosta","Reserva","Inactivo"],["-🆁- Upnea","Reserva","Inactivo"],["-🆁ec- Andus Hakur","Reserva","Inactivo"],["-🆁ec- Kniv","Reserva","Inactivo"],["-🆁ec- Adh","Reserva","Inactivo"],["-🆁ec- FiriusTrixus","Reserva","Inactivo"],["[MERC] FOX","Clan Aliado","No determinado"],["[MERC] Compton","Clan Aliado","No determinado"],["-🆁ec- amestycrab","Reserva","Inactivo"],["-🆁ec- KooRoow","Reserva","Inactivo"],["-🆁ec- AlbaRod","Reserva","Inactivo"],["-🆁ec- LorenzooCs","Reserva","Inactivo"],["-🆁- Max II","Reserva","Inactivo"],["-🆁ec- Pepito22","Reserva","Inactivo"],["-🆁ec- Parca","Reserva","Inactivo"],["-🆁ec- Lauts","Reserva","Inactivo"],["-🆁ec- Baifu","Reserva","Inactivo"],["-🆁ec- (STALKER)","Reserva","Inactivo"],["-🆁ec- Speed!","Reserva","Inactivo"],["-🆁ec- Yullian","Reserva","Inactivo"],["-🆁ec- Comrade potato","Reserva","Inactivo"],["-🆁ec- Marroh","Reserva","Inactivo"],["-🆁- Mplzarro2001","RONIN","Inactivo"],["-🆁- Konig","Reserva","Inactivo"],["-🆁ec- Holasoymash","Reserva","Inactivo"],["| CTM | EmeTey","Clan Aliado","No determinado"],["-🆁ec- Petroka","Reserva","Inactivo"],["-🆁ec- gerrsack","Reserva","Inactivo"],["Waresz [7DL]","Clan Aliado","No determinado"],["TITI [360]","Reserva","No determinado"],["-🆁ec- Alex_03","Aspirante","Inactivo"],["-🆁ec- Zireck","Reserva","Inactivo"],["-🆁- CrazyIvan","RONIN","Game Inactivo"],["Happy","Reserva","Inactivo"],["-🆁ec- rafa06","Reserva","Inactivo"],["-🆁ec-Rafa","Reserva","Inactivo"],["-🆁ec-TuVieja","Reserva","Inactivo"],["-🆁ec- Guido","Reserva","Inactivo"],["-🆁ec- Crist","Reserva","Inactivo"],["-🆁ec- dilcort","Reserva","Inactivo"],["-🆁- Forest","RONIN","Game Inactivo"],["-🆁ec-Sairo","Reserva","Inactivo"],["-🆁ec- el profeta arce","Reserva","Inactivo"],["-🆁- Seba Casella","Reserva","Inactivo"],["360 | 7ROYAN","Clan Aliado","Game Inactivo"],["-🆁ec- hzlrevert","Reserva","Inactivo"],["-🆁ec- Laureano_[S]triker","Reserva","Inactivo"],["-🆁ec- Lastrix","Reserva","Inactivo"],["-🆁ec- DarkySmoke","Reserva","Inactivo"],["-🆁ec- Kuban","Reserva","Inactivo"],["-🆁ec- Jinete","Reserva","Inactivo"],["-🆁- MANOLO","Reserva","Inactivo"],["-🆁ec- Vulgaris Magistralis","Reserva","Inactivo"],["-🆁ec- Felipe","Reserva","Inactivo"],["-🆁ec- Latin-Foxy~ ツ","Reserva","Inactivo"],["-🆁ec- w00dy","Reserva","Inactivo"],["-🆁ec- Kraken Priest","Reserva","Inactivo"],["[VNGD] Skyline","Clan Aliado","No determinado"],["[VNGD] Cigarro","Clan Aliado","No determinado"],["[VNGD] Quintino","Clan Aliado","No determinado"],["[VNGD] Napalm","Clan Aliado","No determinado"],["[VNGD] EoGana","Clan Aliado","No determinado"],["[VNGD] VonMack","Clan Aliado","No determinado"],["[VNGD] Kingdomedu","Clan Aliado","No determinado"],["[VNGD] Koch","Clan Aliado","No determinado"],["[VNGD] Miope","Clan Aliado","No determinado"],["[VNGD] Botininhas","Clan Aliado","No determinado"],["[VNGD] Murf","Clan Aliado","No determinado"],["[VNGD] Jhon","Clan Aliado","No determinado"],["[VNGD] Pardal","Clan Aliado","No determinado"],["[VNGD] D+2","Clan Aliado","No determinado"],["[VNGD] Czar","Clan Aliado","No determinado"],["[VNGD] Erik","Clan Aliado","No determinado"],["[VNGD] Charlie","Clan Aliado","No determinado"],["[VNGD] Tuto","Clan Aliado","No determinado"],["[VNGD] Rafa","Clan Aliado","No determinado"],["[VNGD] Netto","Clan Aliado","No determinado"],["[VNGD] JOHN","Clan Aliado","No determinado"],["[VNGD] FRITZ","Clan Aliado","No determinado"],["[VNGD] KINGDOMEDU","Clan Aliado","No determinado"],["[VNGD] QUINTINO","Clan Aliado","No determinado"],["[VNGD] NAPALM","Clan Aliado","No determinado"],["[VNGD] CIGARRO","Clan Aliado","No determinado"],["[VNGD] VVESIN BBRAZ","Clan Aliado","No determinado"],["-🆁ec- Comrade Downte","Reserva","Inactivo"],["-🆁ec- Sudaca","Reserva","Inactivo"],["-🆁ec- Blue Label de J. Walker","Reserva","Inactivo"],["-🆁ec- WarThog ツ","Reserva","Inactivo"],["-🆁- Valdez","RONIN","Activo"],["-🆁ec- Achimilco","Reserva","Inactivo"],["-🆁ec- Tute","Recluta","Activo"],["-🆁ec- Jotace","Reserva","Inactivo"],["-🆁ec- Fazza.17","Reserva","Inactivo"],["-🆁ec- Rubio","Reserva","Inactivo"],["-🆁ec- Bolillotiezoxd","Reserva","Inactivo"],["-🆁- Rambo Snow","Reserva","Inactivo"],["-🆁ec- GarrusVakarian96","Reserva","Inactivo"],["-🆁ec- Valentino","Reserva","Inactivo"],["-🆁ec- powah","Reserva","Inactivo"],["-🆁ec- Direswolf","Reserva","Inactivo"],["-🆁ec- Halcon 3","Reserva","Inactivo"],["-🆁ec- Wesos","Reserva","Inactivo"],["-🆁ec- F.F.Rossetto96","Reserva","Inactivo"],["-🆁ec- ATLAS","Reserva","Inactivo"],["-🆁ec- DOC","Reserva","Inactivo"],["[501st] Apolo","Clan Aliado","No determinado"],["-🆁ec- Mombuuu","Reserva","Inactivo"],["LuciDeLucifer -🆁ec","Reserva","Inactivo"],["EL JORDAN 23 -🆁ec","Reserva","Inactivo"],["DonVicios -🆁ec","Reserva","Inactivo"],["vALTOr -🆁ec-","Reserva","Inactivo"],["WTH Alex","Clan Aliado","No determinado"],["WTH Villar","Clan Aliado","No determinado"],["Pauviff -🆁ec-","Reserva","Inactivo"],["GeneralQuito-🆁ec-","Reserva","Inactivo"],["WalterSK -🆁-","Reserva","Discord Inactivo"],["Warron -🆁ec-","Reserva","Inactivo"],["Montagne -🆁ec-","Reserva","Inactivo"],["Nikamikaze -🆁ec-","Reserva","Inactivo"],["[501st] Grim1708","Clan Aliado","No determinado"],["Scaloneta -🆁ec-","Reserva","Inactivo"],["Chapaleiro Maluco","Reserva","Inactivo"],["Faidel -🆁ec-","Reserva","Inactivo"],["Chapo -🆁ec-","Reserva","Inactivo"],["-🆁- 4l console","Reserva","Inactivo"],["daniel xd","Reserva","Inactivo"],["Mightyfallen","Clan Aliado","No determinado"],["[501st] Mohnke","Clan Aliado","No determinado"],["501st | Trompo","Clan Aliado","No determinado"],["501st | OsoBlackDemon","Clan Aliado","No determinado"],["Panquema2-7DL-","Clan Aliado","No determinado"],["501st | El sid carre","Clan Aliado","No determinado"],["HotSince -🆁ec-","Reserva","Inactivo"],["Tukuman  -🆁ec-","Reserva","Inactivo"],["Ξ Unknown","Clan Aliado","No determinado"],["Jack -🆁ec-","Reserva","Inactivo"],["Orukuait -🆁ec","Reserva","Inactivo"],["Rivo -🆁ec","Reserva","Inactivo"],["Lobo -🆁ec","Reserva","Inactivo"],["FerJager -🆁ec","Reserva","Inactivo"],["Lish  -🆁ec","Reserva","Inactivo"],["-🆁- Osteo","RONIN","Activo"],["Darksection -🆁ec","Reserva","Inactivo"],["Eagle01 -🆁ec","Reserva","Inactivo"],["Passerby -🆁ec","Reserva","Inactivo"],["Nukem -🆁ec-","Reserva","Inactivo"],["Moreno","Reserva","Inactivo"],["Yonah -🆁ec-","Reserva","Inactivo"],["Aizen -🆁ec-","Reserva","Inactivo"],["Pato Suicida -🆁ec-","Reserva","Inactivo"],["SpicyBadLuck -🆁ec-","Reserva","Inactivo"],["Cordero -🆁ec-","Reserva","Inactivo"],["Nahue -🆁ec-","Reserva","Inactivo"],["BillM8 -🆁ec-","Reserva","Inactivo"],["Fede -🆁ec-","Reserva","Inactivo"],["Señor Kino","Reserva","Inactivo"],["Rhiiyyz_ -🆁ec-","Reserva","Inactivo"],["Agus889 -🆁ec-","Reserva","Inactivo"],["paccO -🆁ec-","Reserva","Inactivo"],["360 | Comodin","Clan Aliado","Inactivo"],["Evamiau -🆁ec-","Reserva","Inactivo"],["Koslay -🆁ec-","Reserva","Inactivo"],["-🆁- Momo","Clan Aliado","Activo"],["Schutzzz -🆁ec","Reserva","Inactivo"],["Kramos_666 -🆁ec","Reserva","Inactivo"],["Rafiki -🆁ec","Reserva","Inactivo"],["NachoMz -🆁ec","Reserva","Inactivo"],["felipezeak -🆁ec-","Reserva","Inactivo"],["-🆁- JIALLMD","RONIN","Ausente con Aviso"],["Gustavo Cerati -🆁ec-","Reserva","Inactivo"],["-🆁- KFC","RONIN","Activo"],["Bruke01 -🆁ec-","Reserva","Inactivo"],["Lucky Bats -🆁ec-","Reserva","Inactivo"],["Bulking -🆁ec-","Reserva","Inactivo"],["Kr4user -🆁ec-","Reserva","Inactivo"],["RedSS -🆁ec-","Reserva","Inactivo"],["-🆁- Leatherkite","Shogunato","Activo"],["★ M a r i l y n ϟ","Reserva","Inactivo"],["Blacktooht -🆁ec-","Reserva","Inactivo"],["MrP0xyRaN -🆁ec-","Reserva","Inactivo"],["Ghoulraiser -🆁ec-","Reserva","Inactivo"],["Cisner -🆁ec-","Reserva","Inactivo"],["Cabeza-🆁ec-","Reserva","Inactivo"],["Elba_calao -🆁ec-","Reserva","Inactivo"],["-🆁- Negro","Reserva","Inactivo"],["-🆁- Ryokodps","Reserva","Inactivo"],["The Notorious B.I.G -🆁ec-","Clan Aliado","No determinado"],["Pancho villa -🆁ec-","Clan Aliado","No determinado"],["Emiliano Zapata-🆁ec-","Clan Aliado","No determinado"],["butch cassidy -🆁ec-","Clan Aliado","No determinado"],["Sundance Kid -🆁ec-","Clan Aliado","No determinado"],["Subcomandante Marcos 🆁ec-","Clan Aliado","No determinado"],["Pablo Escobar-🆁ec-","Clan Aliado","No determinado"],["Pipo -🆁ec-","Reserva","Inactivo"],["Parodi00 -🆁ec-","Reserva","Inactivo"],["Plomolindo","Reserva","Inactivo"],["Favaloro -🆁-","Reserva","Inactivo"],["Licha -🆁ec-","Reserva","Inactivo"],["Kite -🆁ec-","Reserva","Inactivo"],["-🆁- Canaa","RONIN","Activo"],["ClaveFaze -🆁ec-","Reserva","Inactivo"],["Spectre -🆁ec-","Reserva","Inactivo"],["-🆁- Kafaba","Reserva","Inactivo"],["-🆁ec Lilith","Recluta","Inactivo"],["-🆁- Conejo Rabbit","SAKIMORI","Game Inactivo"],["-🆁- Arie","Reserva","Game Inactivo"],["Katz","","Game Inactivo"],["-🆁- Morrigan","RONIN","Activo"],["-🆁ec- Panzer","Reserva","Inactivo"],["-🆁ec- Aisac","Reserva","Inactivo"],["Saphe -🆁ec-","Reserva","Inactivo"],["-🆁- Jeresin","Reserva","Inactivo"],["Teka -🆁ec-","Reserva","Inactivo"],["Eduin -🆁ec-","Reserva","Inactivo"],["Casse -🆁ec-","Reserva","Inactivo"],["S£βΔ seba -🆁ec-","Reserva","Inactivo"],["Fisher -🆁ec-","Reserva","Inactivo"],["Brayan  -🆁ec-","Reserva","Inactivo"],["Mario Colonna","Reserva","Inactivo"],["Aldair -🆁ec-","Reserva","Inactivo"],["Xodaen -🆁ec-","Reserva","Inactivo"],["-🆁ec Blackbeard","Reserva","Inactivo"],["sambagro0ve -🆁ec-","Reserva","Inactivo"],["Marito -🆁ec-","Reserva","Inactivo"],["Isaac -🆁ec-","Reserva","Inactivo"],["-🆁- Meow","Reserva","Game Inactivo"],["-🆁ec Morri","Reserva","Inactivo"],["-🆁ec Facu","Reserva","Inactivo"],["-🆁- Chipa","Reserva","Inactivo"],["Mike tenshi -🆁ec-","Reserva","Inactivo"],["-🆁- Ruloo","RONIN","Activo"],["Bluox -🆁ec-","Reserva","Inactivo"],["MC_Virgins -🆁ec-","Reserva","Inactivo"],["360 | Nidhoggs","Clan Aliado","Activo"],["-③⑥⓪- Criiko","Clan Aliado","Activo"],["[VNGD] TRACKS_GT","Clan Aliado","No determinado"],["[VNGD] Sparrow","Clan Aliado","No determinado"],["[VNGD] Brazilian Noob","Clan Aliado","No determinado"],["-🆁-Frn","RONIN","Activo"],["Sgt. Mokka -🆁ec-","Reserva","Inactivo"],["-🆁- SNATI","SAKIMORI","Activo"],["ElPlomero -🆁ec-","Reserva","Inactivo"],["-🆁- Paulo","RONIN","Activo"],["gesse -🆁ec-","Reserva","Inactivo"],["Maiba -🆁ec-","Reserva","Inactivo"],["-🆁ec- NALES","Reserva","Inactivo"],["!Aqua -🆁ec-","Recluta","Inactivo"],["Mote12 -🆁ec-","Reserva","Inactivo"],["ᴀres -🆁ec-","Reserva","Inactivo"],["Demian ♫ -🆁ec-","Reserva","Inactivo"],["-🆁- ElBiome","Reserva","Inactivo"],["-🆁- READY","RONIN","Activo"],["-🆁- Wizzy","RONIN","Activo"],["-🆁- XeroXs","Reserva","Inactivo"],["-🆁ec- SantisimoSebastian","Reserva","Inactivo"],["-🆁-Ragnar","RONIN","Inactivo"],["-🆁- Tegpro","RONIN","Discord Inactivo"],["K O N G E N -🆁ec-","Reserva","Game Inactivo"],["Zocu -🆁ec-","Reserva","Inactivo"],["ESBIRREAN","Clan Aliado","Inactivo"],["-🆁ec- Jeyker","Reserva","Inactivo"],["-🆁ec- bropera","Reserva","Inactivo"],["-🆁ec- Frank","Reserva","Inactivo"],["-🆁ec- Trabis","Reserva","Inactivo"],["-🆁ec- Bonzo","Reserva","No determinado"],["Caballo Loco -🆁ec-","Reserva","Inactivo"],["J_ro -🆁ec-","Reserva","Inactivo"],["-🆁- Larralde","RONIN","Activo"],["Facux -🆁ec-","Reserva","Inactivo"],["-🆁- Pororocosmic","Reserva","Inactivo"],["Facherosincaña [360]","Clan Aliado","No determinado"],["Dapiev","Clan Aliado","No determinado"],["Aikon [360]","Clan Aliado","No determinado"],["Plastilina [360]","Clan Aliado","No determinado"],["Aslan [360]","Clan Aliado","No determinado"],["EL GIGOLÓ [360]","Clan Aliado","No determinado"],["Bizcochuelo [360]","Clan Aliado","No determinado"],["-③⑥⓪- Chinchu","Clan Aliado","No determinado"],["-③⑥⓪- RodrigoSS","Clan Aliado","No determinado"],["-🆁- iFargg","RONIN","Activo"],["-🆁ec- La Gula","Reserva","Inactivo"],["-🆁ec- Mefhysto","Reserva","Inactivo"],["-🆁- Owen Crippa","RONIN","Activo"],["-🆁ec- Kanjō","Reserva","Inactivo"],["-🆁ec- Shampooo","Reserva","Inactivo"],["-🆁ec-Destroyer Rex","Reserva","Inactivo"],["Tibubambi [360]","Clan Aliado","No determinado"],["Lefunk","Clan Aliado","Inactivo"],["-🆁ec- Arceusgame","Reserva","Inactivo"],["-🆁ec- Tivu","Reserva","Inactivo"],["Ψ AmaHölle","Clan Aliado","No determinado"],["Ψ Aoi","Clan Aliado","No determinado"],["-🆁ec- Galamix","Reserva","Inactivo"],["-🆁ec- Amosito","Reserva","Inactivo"],["M.A.K.-8 [360]","Clan Aliado","No determinado"],["Colgate [360]","Clan Aliado","No determinado"],["-🆁- Kanza","RONIN","Activo"],["GBI Murray Pvt Gringo","Clan Aliado","No determinado"],["『V』VNGD","Clan Aliado","No determinado"],["Alexis VNZLA [LCM]","Clan Aliado","No determinado"],["Zeta -🆁ec-","Reserva","Inactivo"],["| CTM | Noa","Clan Aliado","No determinado"],["Coitosaurio -🆁ec-","Reserva","Inactivo"],["-🆁ec- Jeff","Reserva","Inactivo"],["GBI Terry","Clan Aliado","No determinado"],["GBI Icon","Clan Aliado","No determinado"],["GBI Flying Dog","Clan Aliado","No determinado"],["-🆁- A4 (aaaa)","Reserva","Inactivo"],["-🆁ec- RiemannZ12","Reserva","Inactivo"],["-🆁ec- Qatal","Reserva","Inactivo"],["-🆁ec- Leyco","Reserva","Inactivo"],["-🆁ec- Lorendou","Reserva","Inactivo"],["-🆁ec- Cherie","Reserva","Inactivo"],["-🆁ec- WarHero","Reserva","Inactivo"],["-🆁ec- Srmomon5","Reserva","Inactivo"],["-🆁ec- Sopa1324","Reserva","Inactivo"],["-🆁ec- Wolff","Reserva","Inactivo"],["-360- Chotosaurio","Reserva","Inactivo"],["-🆁ec- Choriflan","Reserva","Inactivo"],["-🆁ec- MK_Ragnar","Reserva","Inactivo"],["GBI Brick","Clan Aliado","No determinado"],["ζ | LC","Clan Aliado","No determinado"],["-🆁ec- El Gallo","Reserva","Inactivo"],["ゐ CF","Clan Aliado","No determinado"],["GBI Campo","Clan Aliado","No determinado"],["Barca","Reserva","Inactivo"],["Ke🆁tz","Clan Aliado","No determinado"],["-🆁- Maca","RONIN","Activo"],["-🆁- Choki","RONIN","Activo"],["-🆁- Jose Shelby","Reserva","Ausente con Aviso"],["-🆁ec- Jhony Burger","Reserva","Inactivo"],["[VNGD] Bad Jao","Clan Aliado","No determinado"],["-🆁ec- V1noCL","Aspirante","Inactivo"],["-🆁ec- Rodrigo","Reserva","Inactivo"],["-🆁ec- SrNitsuga","Reserva","Inactivo"],["-🆁ec- Justin","Reserva","Inactivo"],["-🆁ec- Dylan","Reserva","Inactivo"],["-🆁k- geroh5","Reserva","Inactivo"],["-🆁ec- Hippie con osde","Reserva","Inactivo"],["-🆁- Nahuel","RONIN","Activo"],["-🆁- Lechuga","RONIN","Activo"],["-🆁ec-Luchardo","Reserva","Inactivo"],["ZAPALERI🌋","Reserva","No determinado"],["BUSHIDO 👹","Reserva","No determinado"],["HELLWINGS 𓆩𓆪","Reserva","No determinado"],["-🆁ec- Morten","Reserva","Inactivo"],["-🆁- SRtrikerz","Reserva","Inactivo"],["-🆁- Guan_minugun12","RONIN","Activo"],["彡 MIB 彡 Viajante","Clan Aliado","No determinado"],["-🆁ec- Piton","Reserva","Inactivo"],["≫ BAIN","Clan Aliado","No determinado"],["彡 MIB","Clan Aliado","No determinado"],["-🆁ec- Bastian","Reserva","Inactivo"],["-🆁ec- Dirtinela","Reserva","Inactivo"],["-🆁ec- Nitsuga","Reserva","Inactivo"],["-🆁ec- Luzbelito","Reserva","Inactivo"],["-🆁ec- MatOOOO","Reserva","Inactivo"],["-🆁ec-  Darkvood","Reserva","Inactivo"],["-🆁ec- SuzukiSamurai92","Reserva","Inactivo"],["-🆁- Blackfield","RONIN","Activo"],["Gil Laburante [360]","Clan Aliado","No determinado"],["-🆁ec- Sakesito","Reserva","Inactivo"],["-🆁- ElNegro","RONIN","Activo"],["-🆁ec- Nono","Reserva","Inactivo"],["-🆁ec- REaccel","Reserva","Inactivo"],["-🆁-Crazy Dog","RONIN","Activo"],["-🆁ec- Le_Nozo","Reserva","Inactivo"],["Nene","Clan Aliado","Inactivo"],["-🆁- rulow","RONIN","Activo"],["-🆁ec- EL TENIENTE DAN","Reserva","Inactivo"],["-🆁- Ling-Ling","Shogunato","Activo"],["-🆁ec- ReACker_cL","Reserva","Inactivo"],["-🆁- VarguSS","RONIN","Activo"],["-🆁ec- Vite","Reserva","Inactivo"],["-🆁- D1STINTO","RONIN","Activo"],["-🆁ec- Seisbor","Reserva","Inactivo"],["Ronin 🌊","Reserva","No determinado"],["-🆁ec- Ponzi ARG","Reserva","Inactivo"],["-🆁ec- DIEGO_RAM_12","Reserva","Inactivo"],["-🆁ec- El Pipii","Reserva","Inactivo"],["Ж Ivan","Clan Aliado","No determinado"],["-🆁ec- RolandoPorro","Reserva","Inactivo"],["-🆁ec- crazypenguin1103","Reserva","Inactivo"],["-🆁ec- eluriza","Reserva","Inactivo"],["-🆁ec- Docgalvan","Reserva","Inactivo"],["[MERC]","Clan Aliado","No determinado"],["[7DL]","Clan Aliado","No determinado"],["-🆁- leichtstaff","RONIN","Activo"],["-🆁ec- pabloel12","Reserva","Inactivo"],["-🆁ec- A. Kicillof","Reserva","Inactivo"],["[VNGD] Andso","Clan Aliado","No determinado"],["| CTM |","Clan Aliado","No determinado"],["-🆁ec- Draiggocharg","Reserva","Inactivo"],["-🆁ec- Paxorico","Reserva","Inactivo"],["Salvatore","Clan Aliado","No determinado"],["AESIR","Clan Aliado","No determinado"],["-③⑥⓪- Sebastardo","Clan Aliado","No determinado"],["-🆁ec- AbortoFisura","Reserva","Inactivo"],["[VNGD] Bodoque","Clan Aliado","No determinado"],["-🆁ec- Chelo","Reserva","Inactivo"],["ζCondor🆁onin","Clan Aliado","No determinado"],["-③⑥⓪- Driguez","Clan Aliado","No determinado"],["-③⑥⓪- Maxwell","Clan Aliado","No determinado"],["-③⑥⓪- Kaka","Clan Aliado","No determinado"],["SACARFT","Clan Aliado","No determinado"],["-🆁- Cuniyo","RONIN","Inactivo"],["NICO FILE","Clan Aliado","No determinado"],["DFLUFY","Clan Aliado","No determinado"],["[VNGD] nice","Clan Aliado","No determinado"],["[VNGD] shenlong","Clan Aliado","No determinado"],["[VNGD] Partizan","Clan Aliado","No determinado"],["[VNGD] gatinho","Clan Aliado","No determinado"],["-🆁ec- Emigraziano","Reserva","Inactivo"],["-🆁ec- Nicosanfer","Reserva","Inactivo"],["-🆁ec-Ziufer","Reserva","Inactivo"],["-🆁ec- Fufa (joako)","Reserva","Inactivo"],["CTM | LGS","Clan Aliado","No determinado"],["Æ | Bandorg","Clan Aliado","No determinado"],["Æ | Darius","Clan Aliado","No determinado"],["CTM | Subzero","Clan Aliado","No determinado"],["Æ | KBEZON","Clan Aliado","No determinado"],["Æ | Garza","Clan Aliado","No determinado"],["Æ | NationKiller","Clan Aliado","No determinado"],["Æ | Custom","Clan Aliado","No determinado"],["-🆁- Jack Herer","RONIN","No determinado"],["360 | DDoc","Clan Aliado","No determinado"],["Æ | Narr","Clan Aliado","No determinado"],["-🆁ec- littlejimbo","Reserva","Activo"],["-🆁ec- Rasha","Reserva","Inactivo"],["-🆁ec- Tomate","Reserva","Inactivo"],["-🆁- Mary","RONIN","No determinado"],["-🆁ec- Totem","Recluta","Activo"],["-🆁ec- Siuxter","Reserva","No determinado"],["CTM | Jazer","Clan Aliado","No determinado"],["-🆁ec- Trash","Reserva","Inactivo"],["[VNGD] Ross","Clan Aliado","No determinado"],["[VNGD] BRT tanquista","Clan Aliado","No determinado"],["-🆁ec- Taladro","Reserva","Inactivo"],["-🆁ec- Leigo","Reserva","Inactivo"],["-🆁- Macciner","RONIN","Activo"],["[VNGD] Eduu1","Clan Aliado","No determinado"],["-🆁- dpdixon","RONIN","Activo"],["-🆁ec- Killjoa","Reserva","Inactivo"],["-🆁ec- Comerosketes","Reserva","Inactivo"],["-🆁ec- elgranld","Reserva","Inactivo"],["-🆁ec- Zanguang0","Reserva","Inactivo"],["-🆁- ARES","RONIN","Activo"],["Tito Crema [360]","Clan Aliado","No determinado"],["-🆁ec-  Santucho","Reserva","Inactivo"],["[VNGD] Duh011","Clan Aliado","No determinado"],["[VNGD]Maximus","Clan Aliado","No determinado"],["[VNGD] Havoc","Clan Aliado","No determinado"],["[VNGD] Castaway","Clan Aliado","No determinado"],["[VNGD] Sanches","Clan Aliado","No determinado"],["[VNGD] Barão Vermelho","Clan Aliado","No determinado"],["[VNGD] Henrique","Clan Aliado","No determinado"],["O_PADRE","Clan Aliado","No determinado"],["-🆁- Maljoaco","RONIN","Activo"],["-🆁ec- Materolio","Reserva","Inactivo"],["-🆁ec- I|I BOT","No Determinado","No determinado"],["-🆁ec- stlrhaegal","Reserva","Inactivo"],["-🆁ec- ENDER","Reserva","Inactivo"],["scraft 360","Clan Aliado","No determinado"],["torowillians 360","Clan Aliado","No determinado"],["alkon 360","Clan Aliado","No determinado"],["Va🆁ni","No Determinado","No determinado"],["Analfabetto","Clan Aliado","No determinado"],["[VNGD] Mira","Clan Aliado","No determinado"],["[VNGD] Welington","Clan Aliado","No determinado"],["[VNGD] XDM","Clan Aliado","No determinado"],["[VNGD] Jao","Clan Aliado","No determinado"],["[VNGD] Spearow","Clan Aliado","No determinado"],["-🆁- S ese","RONIN","Activo"],["-🆁ec- Rodri","Aspirante","Inactivo"],["-🆁ec- Beto","Reserva","Inactivo"],["-🆁- SSG_Ragnar","RONIN","Activo"],["Emwe77","Clan Aliado","No determinado"],["-🆁ec- Ckeimel","Recluta","Inactivo"],["OGT","Clan Aliado","No determinado"],["Milostoff","Clan Aliado","No determinado"],["360 PANCHO","Clan Aliado","No determinado"],["-🆁- Roy Fokker","RONIN","Inactivo"],["-③⑥Ⓐ-  Nottomi","Clan Aliado",""],["『V🆁』Miltin Panzer","Clan Aliado","No determinado"],["peponullo","Aspirante","No determinado"],["Santi -Rec","Reserva","Activo"],["URANIUM","",""],["360","",""],["-🆁-Tukigod","RONIN","Activo"],["-🆁- Canuto","RONIN","Activo"],["Joacospartan 360","Clan Aliado","No determinado"],["McLovin -③⑥⓪-","Clan Aliado","No determinado"],["Nahblas -③⑥⓪-","Clan Aliado","No determinado"],["Inge -③⑥⓪-","Clan Aliado","No determinado"],["V Prism","Clan Aliado","No determinado"],["-🆁- Stunplayer","RONIN","No determinado"],["V Thomazinezyzz","Clan Aliado","No determinado"],["V Uillis","Clan Aliado","No determinado"],["V Sartori","Clan Aliado","No determinado"],["V crypt","Clan Aliado","No determinado"],["CTM | Excion","Clan Aliado","No determinado"],["-🆁- Joas","RONIN","Activo"],["-🆁ec- audador","Reserva","Inactivo"],["ae | Boke","Clan Aliado","No determinado"],["ζ | Saku","Clan Aliado","No determinado"],["ζ | Agustin","Clan Aliado","No determinado"],["ζ | Bryan","Clan Aliado","No determinado"],["-🆁ec- Saint","Reserva","Activo"],["-③⑥⓪- Mushufaso","Clan Aliado","No determinado"],["-③⑥⓪- Seito","Clan Aliado","No determinado"],["-③⑥⓪- Nahblas","Clan Aliado","No determinado"],["-🆁ec- Kidd0","Reserva","Inactivo"],["-🆁ec- WnloKO","Reserva","Inactivo"],["『V』 Vector Synn","Clan Aliado","No determinado"],["-🆁- Prayr","RONIN","Inactivo"],["-🆁ec- frazer","Reserva","Inactivo"],["-🆁- Rigger","RONIN","Activo"],["-🆁ec- MrChayanne","Recluta","Inactivo"],["-🆁ec- odin_34","Aspirante","Inactivo"],["-🆁ec- scatman","Reserva","Inactivo"],["-🆁ec- Ciclon","Aspirante","Inactivo"],["-🆁ec- DolceGabbana","Reserva","No determinado"],["Siberian","Clan Aliado","Inactivo"],["El Joni","Clan Aliado",""],["『V』Veintidos","Clan Aliado",""],["U236 Replicante","Clan Aliado",""],["U236 Toyota","Clan Aliado",""],["CTM | Excion Flux","Clan Aliado",""],["CL | Beats","Clan Aliado",""],["『V』GTO","Clan Aliado",""],["360 | Coleman","Clan Aliado",""],["CTM | GordoGranudo","Clan Aliado",""],["CTM | Wicho","Clan Aliado",""],["🅤235 NeonFiver","Clan Aliado",""],["7DL Vikingo","Clan Aliado",""],["D.C. Kmatig","Clan Aliado",""],["76561198846495694","RONIN",""],["kapipita","Clan Aliado",""],["-🆁ec- pinguino333","Reserva",""],["CTM | Zuak","Clan Aliado",""],["-③⑥Ⓐ- Cha0s","Clan Aliado",""],["CTM | Aerials","Clan Aliado",""],["CTM | Subdeudita","Clan Aliado",""],["CTM | Skitz","Clan Aliado",""],["CTM | Chileno","Clan Aliado",""],["CTM | Muller","Clan Aliado",""],["CTM | Leviatan","Clan Aliado",""],["CTM | Takes","Clan Aliado",""],["CTM | Maloql","Clan Aliado",""],["CTM | Shaka","Clan Aliado",""],["CTM | Pamdaml","Clan Aliado",""],["CTM | Jackas","Clan Aliado",""],["CTM | After An","Clan Aliado",""],["CTM | Laura","Clan Aliado",""],["-🆁ec-Fernet con coca","Reserva",""],["CTM | Chino","Clan Aliado",""],["CTM | Brandon","Clan Aliado",""],["CTM | Noob","Clan Aliado",""],["CTM | Tyr","Clan Aliado",""],["CTM | Insert Texto","Clan Aliado",""],["CTM | Abderan","Clan Aliado",""],["CTM | Perik","Clan Aliado",""],["CTM |","Clan Aliado",""],["-🆁ec- Ragnark","Clan Aliado",""],["『V』Galo","Clan Aliado",""],["CAVャTHX","Clan Aliado",""],["CTM | Desert","Clan Aliado",""],["CTM | Matador","Clan Aliado",""],["-🆁ec- | Luvien","Recluta","Ausente con Aviso"],["-🆁ec- sgt Hugo Stiglitz","Aspirante","Inactivo"],["-🆁ec- Mr. Gss","Aspirante","Inactivo"],["CTM | Hugo","Clan Aliado",""],["CTM | Darko","Clan Aliado",""],["CTM | matias93x","Clan Aliado",""],["Mathews","Clan Aliado",""],["CTM | Absolute","Clan Aliado",""],["CTM | Repollo","Clan Aliado",""],["CTM | Blackburn","Clan Aliado",""],["-🆁ec- Laurent","Aspirante","Inactivo"],["CTM | Z Spartan","Clan Aliado",""],["ctm | eLILAI","Clan Aliado",""],["uSER","Clan Aliado",""],["-🆁- Ultra","RONIN","Activo"],["-🆁ec- Konrad","Reserva",""],["CAVャMarcao","Clan Aliado",""],["CAVャTermoBox","Clan Aliado",""],["MIB | Lreis","Clan Aliado",""],["『V』NUCLEAR","Clan Aliado",""],["MIB | Gabriel","Clan Aliado",""],["MIB | Alex","",""],["CTM | Kru","Clan Aliado",""],["-🆁- Zorn","RONIN","Activo"],["-🆁ec- Bruno","Reserva",""],["CTM | Fuerza","Clan Aliado",""],["CTM | ND","Clan Aliado",""],["Hll Ant","Clan Aliado",""],["CAV | Kasiovera","Clan Aliado",""],["U | Smolesk","Clan Aliado",""],["Cyborg | 360","Clan Aliado",""],["CAV | Diego 100 Alma","Clan Aliado",""],["-🆁ec- Negative","Reserva",""],["-🆁- Don Mateo","Clan Aliado",""],["-🆁- Mr Antonio","Clan Aliado",""],["-🆁- Jagermaister","RONIN","Activo"],["-🆁ec- Gatox","Recluta","Inactivo"],["CTM dk sangre","Clan Aliado",""],["-🆁ec-patzux","Reserva","Inactivo"],["CTM artikuz","Clan Aliado",""],["CTM delafuerza","",""],["CTM ezquizokhazik","",""],["CTM Vichox","Clan Aliado",""],["CTM","",""],["-③⑥⓪- Cabo Perez","Clan Aliado",""],["-③⑥⓪-","Clan Aliado",""],["Stun","",""],["-③⑥⓪- torowilliams","",""],["-③⑥⓪- drspok","",""],["-③⑥⓪- nico001","",""],["-③⑥⓪- Igris","",""],["-③⑥⓪- kviper","",""],["-③⑥⓪- jose.xx","",""],["-③⑥⓪- facux7696","",""],["-③⑥⓪- Kamisama","",""],["-③⑥⓪- Forastero","",""],["xeba","Clan Aliado",""],["-🆁- Gabo91","RONIN","Ausente con Aviso"],["CAV | Ankus","Clan Aliado",""],["-🆁-Felipexsd","RONIN","Activo"],["CHMA","Clan Aliado",""],["-🆁ec-melchi","Aspirante","Inactivo"],["彡 Leo 彡","Clan Aliado",""],["彡 Maxx 彡","Clan Aliado",""],["彡 VRUM Alexandre Paini 彡","Clan Aliado",""],["彡 Stryder 彡","Clan Aliado",""],["彡 Vieira 彡","Clan Aliado",""],["mrclocke","Aspirante","Inactivo"],["r0mb0","Aspirante","Inactivo"],["-🆁ec- kazachok","Recluta","Activo"],["Bertoz","Rookie",""],["-③⑥⓪- Urfire","Clan Aliado",""],["el_ichi","Clan Aliado",""],["-🆁- Alex","RONIN","Activo"],["-🆁ec- Zavalinho","Recluta","Activo"],["MAK","",""],["-🆁ec-bloodyboyjz1","Recluta","Activo"],["-③⑥⓪- el_ichi1","Clan Aliado",""],["Santute","Clan Aliado",""],["Tucu","Clan Aliado",""],["Cfra","Clan Aliado",""],["SantiUru95","Clan Aliado",""],["ASP-Jhenezis","Aspirante",""],["Matiassqa","Clan Aliado",""],["BenjaChile","Clan Aliado",""],[".xeba","Aspirante",""],["marto","Clan Aliado",""],["-③⑥Ⓐ- Maax","Clan Aliado",""],["-③⑥⓪- chacal 47 snake","Clan Aliado",""],["-③⑥⓪- JuakoSpartan","Clan Aliado",""],["-🆁ec-Rambito","Recluta","Activo"],["ASP-Mykeax","Aspirante","Activo"],["Maverick","Clan Aliado",""],["-🆁ec -SOS","Recluta",""],["Jarocho","Clan Aliado",""],["-🆁ec- Santi","Aspirante",""],["Bara","Aspirante",""],["-🆁ec- Edwinx296","Recluta","Activo"],["DOLGS","Clan Aliado",""],["Chicho","Clan Aliado",""],["Reimot","Clan Aliado",""],["Jeanker","Clan Aliado",""],["-🆁ec-Otaner","Recluta","Activo"],["KUROGANE","RONIN",""],["-🆁- Blacki74","RONIN","Activo"],["-🆁ec- Zecker","Aspirante","Activo"],["ASP-Santyrz072","Aspirante","Activo"],["-🆁ec-gordo tool","Recluta","Activo"],["-🆁ec-Thefarma","Recluta","Activo"],["Yannhlef CAV","Clan Aliado",""],["-🆁ec- Deimos","Recluta","Activo"],["ARIETE","RONIN",""],["SURA","RONIN",""],["Patroclo","RONIN",""],["Andrix HFC","Clan Aliado",""],["360 Ichi","Clan Aliado",""],["360 Rising","Clan Aliado",""],["360 Agus","Clan Aliado",""],["TuTeHem","Aspirante",""],["Joaquin el amigo de Andrix","Clan Aliado",""]];
 </script>
-
-<!-- Firebase Authentication + Firestore: acceso verificado en servidor -->
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js";
-  import {
-    getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut
-  } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js";
-  import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js";
-
-  const firebaseConfig = {
-    apiKey: "AIzaSyDAEjpcozLQMqnhdSvc0VvgPsnezM_nEyA",
-    authDomain: "ronin-7581a.firebaseapp.com",
-    projectId: "ronin-7581a",
-    appId: "1:185011709350:web:990821a192419341e61b67"
-  };
-
-  const firebaseApp = initializeApp(firebaseConfig);
-  const firebaseAuth = getAuth(firebaseApp);
-  const firestore = getFirestore(firebaseApp);
-  let firebaseChecking = false;
-  let verifiedUid = null;
-
-  // Esta versión habilita el acceso del propietario principal.
-  // No confía en roles guardados en localStorage.
-  window.initAuth = function () {
-    window.authMode = "login";
-    if (typeof window.paintGate === "function") window.paintGate();
-  };
-
-  window.toggleAuthMode = function () {
-    const msg = document.getElementById("authMsg");
-    if (msg) {
-      msg.textContent = "El alta de usuarios se habilitará cuando conectemos el servicio seguro de invitaciones.";
-      msg.className = "text-[11px] min-h-[14px] text-amber-400";
-    }
-  };
-
-  window.submitAuth = async function () {
-    const email = String(document.getElementById("authEmail")?.value || "").trim().toLowerCase();
-    const password = document.getElementById("authPass")?.value || "";
-    const msg = document.getElementById("authMsg");
-    const button = document.getElementById("authSubmit");
-    const showError = (text, ok = false) => {
-      if (!msg) return;
-      msg.textContent = text;
-      msg.className = "text-[11px] min-h-[14px] " + (ok ? "text-emerald-400" : "text-red-400");
-    };
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showError("Ingresá un correo válido.");
-    if (!password) return showError("Ingresá tu contraseña.");
-    if (button) button.disabled = true;
-
-    try {
-      const credential = await signInWithEmailAndPassword(firebaseAuth, email, password);
-      const user = credential.user;
-      const adminSnap = await getDoc(doc(firestore, "admins", user.uid));
-
-      if (!adminSnap.exists()) {
-        await signOut(firebaseAuth);
-        return showError("Tu cuenta inició sesión, pero no tiene autorización de administrador en Ronin.");
-      }
-
-      const adminData = adminSnap.data();
-      if (adminData.active !== true || adminData.role !== "super_admin") {
-        await signOut(firebaseAuth);
-        return showError("La cuenta no tiene el rol super_admin activo.");
-      }
-
-      // Solo después de validar UID + documento + estado se habilita la edición.
-      const appUser = { email: user.email || email, role: "admin", uid: user.uid };
-      verifiedUid = user.uid;
-      document.getElementById("authPass").value = "";
-      if (typeof window.enterApp === "function") window.enterApp(appUser);
-      showError("Acceso verificado con Firebase.", true);
-    } catch (error) {
-      const messages = {
-        "auth/invalid-credential": "Correo o contraseña incorrectos.",
-        "auth/user-not-found": "No existe una cuenta con ese correo en Firebase Authentication.",
-        "auth/wrong-password": "Contraseña incorrecta.",
-        "auth/too-many-requests": "Demasiados intentos. Esperá unos minutos y probá otra vez.",
-        "auth/network-request-failed": "No se pudo conectar. Revisá tu conexión."
-      };
-      showError(messages[error.code] || ("No se pudo iniciar sesión: " + (error.code || error.message)));
-    } finally {
-      if (button) button.disabled = false;
-    }
-  };
-
-  window.logout = async function () {
-    try {
-      await signOut(firebaseAuth);
-    } finally {
-      verifiedUid = null;
-      location.reload();
-    }
-  };
-
-  // El panel anterior administraba usuarios en localStorage: no es seguro ni compartido.
-  // Se oculta hasta implementar invitaciones mediante un backend confiable.
-  document.addEventListener("DOMContentLoaded", () => {
-    const accessButton = document.querySelector('button[onclick="openUsersModal()"]');
-    if (accessButton) accessButton.style.display = "none";
-    const registerToggle = document.getElementById("authToggle");
-    if (registerToggle) registerToggle.style.display = "none";
-  });
-
-  onAuthStateChanged(firebaseAuth, async (user) => {
-    if (firebaseChecking) return;
-    firebaseChecking = true;
-    try {
-      if (!user) {
-        verifiedUid = null;
-        window.initAuth();
-        return;
-      }
-
-      const adminSnap = await getDoc(doc(firestore, "admins", user.uid));
-      const adminData = adminSnap.exists() ? adminSnap.data() : null;
-
-      if (!adminData || adminData.active !== true || adminData.role !== "super_admin") {
-        await signOut(firebaseAuth);
-        window.initAuth();
-        const msg = document.getElementById("authMsg");
-        if (msg) {
-          msg.textContent = "Esta cuenta no está autorizada como super_admin.";
-          msg.className = "text-[11px] min-h-[14px] text-red-400";
-        }
-        return;
-      }
-
-      if (verifiedUid !== user.uid) {
-        verifiedUid = user.uid;
-        window.enterApp({ email: user.email || "", role: "admin", uid: user.uid });
-      }
-    } catch (error) {
-      window.initAuth();
-      const msg = document.getElementById("authMsg");
-      if (msg) {
-        msg.textContent = "No se pudo verificar el acceso en Firestore. Revisá las reglas y la conexión.";
-        msg.className = "text-[11px] min-h-[14px] text-red-400";
-      }
-    } finally {
-      firebaseChecking = false;
-    }
-  });
-</script>
-
 </body>
 </html>
